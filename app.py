@@ -7,7 +7,7 @@ import os
 # Change this to the exact name of your Excel file in the same directory
 EXCEL_FILE = "investments.xlsx"
 
-# If your Excel columns differ in wording, update here
+# COLUMN CONSTANTS
 COLUMN_FIRST_NAME = "First Name"
 COLUMN_LAST_NAME = "Last Name"
 COLUMN_ORIGIN_DATE = "Note Origin Date"
@@ -15,6 +15,7 @@ COLUMN_MATURITY_DATE = "Note Maturity Date"
 COLUMN_PRINCIPAL = "Principal"
 COLUMN_INTEREST_RATE = "Interest Rate"
 COLUMN_PRINCIPAL_PLUS_INTEREST = "Principal + Interest"
+COLUMN_PROJECT_NAME = "Project Name"   # NEW COLUMN
 
 def load_investments():
     """
@@ -22,23 +23,23 @@ def load_investments():
     If the file doesn't exist or is empty, returns an empty DataFrame with necessary columns.
     """
     if not os.path.exists(EXCEL_FILE):
-        # Create an empty DataFrame with predefined columns
+        # Create an empty DataFrame with all the columns (including Project Name)
         df = pd.DataFrame(columns=[
             COLUMN_FIRST_NAME, COLUMN_LAST_NAME, 
             COLUMN_ORIGIN_DATE, COLUMN_MATURITY_DATE, 
             COLUMN_PRINCIPAL, COLUMN_INTEREST_RATE, 
-            COLUMN_PRINCIPAL_PLUS_INTEREST
+            COLUMN_PRINCIPAL_PLUS_INTEREST, COLUMN_PROJECT_NAME
         ])
         df.to_excel(EXCEL_FILE, index=False)
         return df
     
     df = pd.read_excel(EXCEL_FILE)
     
-    # Ensure columns exist. If your file might not have them all, handle that here.
+    # Ensure all required columns exist. If they don't, add them.
     required_cols = [
         COLUMN_FIRST_NAME, COLUMN_LAST_NAME, COLUMN_ORIGIN_DATE, 
         COLUMN_MATURITY_DATE, COLUMN_PRINCIPAL, COLUMN_INTEREST_RATE, 
-        COLUMN_PRINCIPAL_PLUS_INTEREST
+        COLUMN_PRINCIPAL_PLUS_INTEREST, COLUMN_PROJECT_NAME
     ]
     for col in required_cols:
         if col not in df.columns:
@@ -55,12 +56,13 @@ def save_investments(df):
 def calculate_maturity_date(origin_date_str):
     """
     Given a string of note origin date (e.g. '2024-02-15'), 
-    returns a string for maturity date 9 months later.
+    returns a string for maturity date ~9 months later.
     """
+    # Adjust parsing as needed for your date formats
     try:
         origin_date = datetime.strptime(origin_date_str, "%Y-%m-%d")
     except ValueError:
-        # Attempt different format: e.g., 'MM/DD/YYYY'
+        # Attempt different common format: e.g. 'MM/DD/YYYY'
         origin_date = datetime.strptime(origin_date_str, "%m/%d/%Y")
     maturity_date = origin_date + timedelta(days=9*30)  # approximate 9 months as 270 days
     return maturity_date.strftime("%Y-%m-%d")
@@ -70,13 +72,12 @@ def calculate_principal_plus_interest(principal, interest_rate):
     """
     principal: float
     interest_rate: float (representing annual rate, e.g. 0.07 for 7%)
-    We approximate 9-month interest as (principal * rate * 9/12).
+    Approximates 9-month interest using simple interest: principal * rate * (9/12).
     """
     try:
         principal = float(principal)
         rate = float(interest_rate)
-        # For a simple interest approach over 9 months
-        interest = principal * (rate) * (9/12)
+        interest = principal * rate * (9/12)
         total = principal + interest
         return round(total, 2)
     except:
@@ -95,22 +96,31 @@ class InvestmentApp:
         self.main_frame = ttk.Frame(self.master, padding="10")
         self.main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Treeview for showing data
-        self.tree = ttk.Treeview(self.main_frame, columns=[
-            COLUMN_FIRST_NAME, COLUMN_LAST_NAME, COLUMN_ORIGIN_DATE, 
-            COLUMN_MATURITY_DATE, COLUMN_PRINCIPAL, COLUMN_INTEREST_RATE, 
+        # Define the columns that the Treeview will show
+        self.columns = [
+            COLUMN_FIRST_NAME, 
+            COLUMN_LAST_NAME, 
+            COLUMN_PROJECT_NAME,   # SHOW PROJECT NAME HERE
+            COLUMN_ORIGIN_DATE, 
+            COLUMN_MATURITY_DATE, 
+            COLUMN_PRINCIPAL, 
+            COLUMN_INTEREST_RATE, 
             COLUMN_PRINCIPAL_PLUS_INTEREST
-        ], show="headings", height=15)
+        ]
+
+        # Treeview for showing data
+        self.tree = ttk.Treeview(self.main_frame, columns=self.columns, show="headings", height=15)
         
         self.tree.heading(COLUMN_FIRST_NAME, text="First Name")
         self.tree.heading(COLUMN_LAST_NAME, text="Last Name")
+        self.tree.heading(COLUMN_PROJECT_NAME, text="Project Name")    # NEW
         self.tree.heading(COLUMN_ORIGIN_DATE, text="Origin Date")
         self.tree.heading(COLUMN_MATURITY_DATE, text="Maturity Date")
         self.tree.heading(COLUMN_PRINCIPAL, text="Principal")
         self.tree.heading(COLUMN_INTEREST_RATE, text="Interest Rate")
         self.tree.heading(COLUMN_PRINCIPAL_PLUS_INTEREST, text="Principal + Interest")
         
-        for col in self.tree["columns"]:
+        for col in self.columns:
             self.tree.column(col, width=120, anchor=tk.CENTER)
 
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -145,10 +155,11 @@ class InvestmentApp:
             self.tree.delete(row)
 
         # Insert data from self.df
-        for idx, row_data in self.df.iterrows():
+        for _, row_data in self.df.iterrows():
             self.tree.insert("", tk.END, values=(
                 row_data.get(COLUMN_FIRST_NAME, ""),
                 row_data.get(COLUMN_LAST_NAME, ""),
+                row_data.get(COLUMN_PROJECT_NAME, ""),   # NEW
                 row_data.get(COLUMN_ORIGIN_DATE, ""),
                 row_data.get(COLUMN_MATURITY_DATE, ""),
                 row_data.get(COLUMN_PRINCIPAL, ""),
@@ -180,15 +191,15 @@ class InvestmentApp:
         if confirm:
             # Remove from DataFrame
             item_values = self.tree.item(selected_item[0], "values")
-            # Identify row in df
             condition = (
                 (self.df[COLUMN_FIRST_NAME] == item_values[0]) & 
                 (self.df[COLUMN_LAST_NAME] == item_values[1]) &
-                (self.df[COLUMN_ORIGIN_DATE].astype(str) == str(item_values[2])) &
-                (self.df[COLUMN_MATURITY_DATE].astype(str) == str(item_values[3])) &
-                (self.df[COLUMN_PRINCIPAL].astype(str) == str(item_values[4])) &
-                (self.df[COLUMN_INTEREST_RATE].astype(str) == str(item_values[5])) &
-                (self.df[COLUMN_PRINCIPAL_PLUS_INTEREST].astype(str) == str(item_values[6]))
+                (self.df[COLUMN_PROJECT_NAME] == item_values[2]) &    # NEW
+                (self.df[COLUMN_ORIGIN_DATE].astype(str) == str(item_values[3])) &
+                (self.df[COLUMN_MATURITY_DATE].astype(str) == str(item_values[4])) &
+                (self.df[COLUMN_PRINCIPAL].astype(str) == str(item_values[5])) &
+                (self.df[COLUMN_INTEREST_RATE].astype(str) == str(item_values[6])) &
+                (self.df[COLUMN_PRINCIPAL_PLUS_INTEREST].astype(str) == str(item_values[7]))
             )
             self.df.drop(self.df[condition].index, inplace=True)
             
@@ -213,97 +224,113 @@ class EntryWindow(tk.Toplevel):
         else:
             self.title("Edit Entry")
 
-        # Labels and entry widgets
+        # Labels
         lbl_fn = ttk.Label(self, text="First Name:")
         lbl_ln = ttk.Label(self, text="Last Name:")
+        lbl_project = ttk.Label(self, text="Project Name:")  # NEW
         lbl_origin = ttk.Label(self, text="Note Origin Date (YYYY-MM-DD):")
         lbl_principal = ttk.Label(self, text="Principal:")
         lbl_interest = ttk.Label(self, text="Interest Rate (decimal):")
 
+        # Entry widgets
         self.entry_fn = ttk.Entry(self)
         self.entry_ln = ttk.Entry(self)
+        self.entry_project = ttk.Entry(self)  # NEW
         self.entry_origin = ttk.Entry(self)
         self.entry_principal = ttk.Entry(self)
         self.entry_interest = ttk.Entry(self)
 
+        # Grid layout
         lbl_fn.grid(row=0, column=0, padx=5, pady=5, sticky="e")
         lbl_ln.grid(row=1, column=0, padx=5, pady=5, sticky="e")
-        lbl_origin.grid(row=2, column=0, padx=5, pady=5, sticky="e")
-        lbl_principal.grid(row=3, column=0, padx=5, pady=5, sticky="e")
-        lbl_interest.grid(row=4, column=0, padx=5, pady=5, sticky="e")
+        lbl_project.grid(row=2, column=0, padx=5, pady=5, sticky="e")  # NEW
+        lbl_origin.grid(row=3, column=0, padx=5, pady=5, sticky="e")
+        lbl_principal.grid(row=4, column=0, padx=5, pady=5, sticky="e")
+        lbl_interest.grid(row=5, column=0, padx=5, pady=5, sticky="e")
 
         self.entry_fn.grid(row=0, column=1, padx=5, pady=5)
         self.entry_ln.grid(row=1, column=1, padx=5, pady=5)
-        self.entry_origin.grid(row=2, column=1, padx=5, pady=5)
-        self.entry_principal.grid(row=3, column=1, padx=5, pady=5)
-        self.entry_interest.grid(row=4, column=1, padx=5, pady=5)
+        self.entry_project.grid(row=2, column=1, padx=5, pady=5)  # NEW
+        self.entry_origin.grid(row=3, column=1, padx=5, pady=5)
+        self.entry_principal.grid(row=4, column=1, padx=5, pady=5)
+        self.entry_interest.grid(row=5, column=1, padx=5, pady=5)
 
-        # If edit mode, populate fields with existing data
+        # If edit mode, populate fields
         if self.mode == "edit" and self.item_values:
+            # item_values structure:
+            # 0: First Name
+            # 1: Last Name
+            # 2: Project Name
+            # 3: Origin Date
+            # 4: Maturity Date
+            # 5: Principal
+            # 6: Interest Rate
+            # 7: Principal + Interest
             self.entry_fn.insert(0, self.item_values[0])
             self.entry_ln.insert(0, self.item_values[1])
-            self.entry_origin.insert(0, self.item_values[2])
-            self.entry_principal.insert(0, self.item_values[4])
-            self.entry_interest.insert(0, self.item_values[5])
+            self.entry_project.insert(0, self.item_values[2])  # NEW
+            self.entry_origin.insert(0, self.item_values[3])
+            self.entry_principal.insert(0, self.item_values[5])
+            self.entry_interest.insert(0, self.item_values[6])
 
         # Action button
         btn_action = ttk.Button(self, text="Save", command=self.save_entry)
-        btn_action.grid(row=5, column=0, columnspan=2, pady=10)
+        btn_action.grid(row=6, column=0, columnspan=2, pady=10)
 
     def save_entry(self):
         fn = self.entry_fn.get().strip()
         ln = self.entry_ln.get().strip()
+        project_name = self.entry_project.get().strip()  # NEW
         origin_date_str = self.entry_origin.get().strip()
         principal_str = self.entry_principal.get().strip()
         interest_str = self.entry_interest.get().strip()
 
-        if not (fn and ln and origin_date_str and principal_str and interest_str):
+        if not (fn and ln and project_name and origin_date_str and principal_str and interest_str):
             messagebox.showerror("Error", "All fields are required.")
             return
 
-        # Calculate maturity date
         maturity_date_str = calculate_maturity_date(origin_date_str)
-        # Calculate principal + interest (approx. 9 months of interest)
         principal_plus_interest = calculate_principal_plus_interest(principal_str, interest_str)
 
         if self.mode == "add":
-            # Create a dict representing the new row
+            # Use pd.concat instead of df.append (pandas 2.0+)
             new_row = {
                 COLUMN_FIRST_NAME: fn,
                 COLUMN_LAST_NAME: ln,
+                COLUMN_PROJECT_NAME: project_name,  # NEW
                 COLUMN_ORIGIN_DATE: origin_date_str,
                 COLUMN_MATURITY_DATE: maturity_date_str,
                 COLUMN_PRINCIPAL: float(principal_str),
                 COLUMN_INTEREST_RATE: float(interest_str),
                 COLUMN_PRINCIPAL_PLUS_INTEREST: principal_plus_interest
             }
-            # FIX: use pd.concat() instead of df.append()
             self.app.df = pd.concat([self.app.df, pd.DataFrame([new_row])], ignore_index=True)
         else:
-            # For editing an existing row, you can keep the rest the same
+            # Editing an existing row
+            item_values = self.item_values
             cond = (
-                (self.app.df[COLUMN_FIRST_NAME] == self.item_values[0]) & 
-                (self.app.df[COLUMN_LAST_NAME] == self.item_values[1]) &
-                (self.app.df[COLUMN_ORIGIN_DATE].astype(str) == str(self.item_values[2])) &
-                (self.app.df[COLUMN_MATURITY_DATE].astype(str) == str(self.item_values[3])) &
-                (self.app.df[COLUMN_PRINCIPAL].astype(str) == str(self.item_values[4])) &
-                (self.app.df[COLUMN_INTEREST_RATE].astype(str) == str(self.item_values[5])) &
-                (self.app.df[COLUMN_PRINCIPAL_PLUS_INTEREST].astype(str) == str(self.item_values[6]))
+                (self.app.df[COLUMN_FIRST_NAME] == item_values[0]) & 
+                (self.app.df[COLUMN_LAST_NAME] == item_values[1]) &
+                (self.app.df[COLUMN_PROJECT_NAME] == item_values[2]) &  # NEW
+                (self.app.df[COLUMN_ORIGIN_DATE].astype(str) == str(item_values[3])) &
+                (self.app.df[COLUMN_MATURITY_DATE].astype(str) == str(item_values[4])) &
+                (self.app.df[COLUMN_PRINCIPAL].astype(str) == str(item_values[5])) &
+                (self.app.df[COLUMN_INTEREST_RATE].astype(str) == str(item_values[6])) &
+                (self.app.df[COLUMN_PRINCIPAL_PLUS_INTEREST].astype(str) == str(item_values[7]))
             )
             idx = self.app.df[cond].index
             if not idx.empty:
                 self.app.df.at[idx, COLUMN_FIRST_NAME] = fn
                 self.app.df.at[idx, COLUMN_LAST_NAME] = ln
+                self.app.df.at[idx, COLUMN_PROJECT_NAME] = project_name  # NEW
                 self.app.df.at[idx, COLUMN_ORIGIN_DATE] = origin_date_str
                 self.app.df.at[idx, COLUMN_MATURITY_DATE] = maturity_date_str
                 self.app.df.at[idx, COLUMN_PRINCIPAL] = float(principal_str)
                 self.app.df.at[idx, COLUMN_INTEREST_RATE] = float(interest_str)
                 self.app.df.at[idx, COLUMN_PRINCIPAL_PLUS_INTEREST] = principal_plus_interest
 
-        # Refresh the tree in the main app
         self.app.load_tree()
         self.destroy()
-
 
 
 def main():
