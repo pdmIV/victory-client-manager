@@ -16,6 +16,7 @@ COLUMN_FIRST_NAME = "First Name"
 COLUMN_LAST_NAME = "Last Name"
 COLUMN_PROJECT_NAME = "Project Name"
 COLUMN_ORIGIN_DATE = "Note Origin Date"
+COLUMN_MONTHS_TO_MATURITY = "Months To Maturity"   # NEW COLUMN
 COLUMN_MATURITY_DATE = "Note Maturity Date"
 COLUMN_PRINCIPAL = "Principal"
 COLUMN_INTEREST_RATE = "Interest Rate"
@@ -27,8 +28,8 @@ def load_investments():
     if not os.path.exists(EXCEL_FILE):
         df = pd.DataFrame(columns=[
             COLUMN_FIRST_NAME, COLUMN_LAST_NAME, COLUMN_PROJECT_NAME,
-            COLUMN_ORIGIN_DATE, COLUMN_MATURITY_DATE, COLUMN_PRINCIPAL,
-            COLUMN_INTEREST_RATE, COLUMN_PRINCIPAL_PLUS_INTEREST
+            COLUMN_ORIGIN_DATE, COLUMN_MONTHS_TO_MATURITY, COLUMN_MATURITY_DATE,
+            COLUMN_PRINCIPAL, COLUMN_INTEREST_RATE, COLUMN_PRINCIPAL_PLUS_INTEREST
         ])
         df.to_excel(EXCEL_FILE, index=False)
         return df
@@ -36,8 +37,8 @@ def load_investments():
     df = pd.read_excel(EXCEL_FILE)
     required_cols = [
         COLUMN_FIRST_NAME, COLUMN_LAST_NAME, COLUMN_PROJECT_NAME,
-        COLUMN_ORIGIN_DATE, COLUMN_MATURITY_DATE, COLUMN_PRINCIPAL,
-        COLUMN_INTEREST_RATE, COLUMN_PRINCIPAL_PLUS_INTEREST
+        COLUMN_ORIGIN_DATE, COLUMN_MONTHS_TO_MATURITY, COLUMN_MATURITY_DATE,
+        COLUMN_PRINCIPAL, COLUMN_INTEREST_RATE, COLUMN_PRINCIPAL_PLUS_INTEREST
     ]
     for col in required_cols:
         if col not in df.columns:
@@ -51,23 +52,30 @@ def save_investments(df):
     df.to_excel(EXCEL_FILE, index=False)
 
 
-def calculate_maturity_date(origin_date_str):
-    """Return ~9-month later maturity date string, given an origin date string."""
+def calculate_maturity_date(origin_date_str, months):
+    """
+    Return maturity date string, given origin_date_str and months to maturity.
+    'months' is an int or float from the slider.
+    """
     try:
         origin_date = datetime.strptime(origin_date_str, "%Y-%m-%d")
     except ValueError:
-        # Attempt a different format
         origin_date = datetime.strptime(origin_date_str, "%m/%d/%Y")
-    maturity_date = origin_date + timedelta(days=9*30)  # approximate 9 months as 270 days
+
+    # Approximate each month as 30 days, or do a more precise approach if desired.
+    maturity_date = origin_date + timedelta(days=30 * months)
     return maturity_date.strftime("%Y-%m-%d")
 
 
-def calculate_principal_plus_interest(principal, interest_rate):
-    """Approximate 9-month simple interest on principal at given annual interest rate."""
+def calculate_principal_plus_interest(principal, interest_rate, months):
+    """
+    Scale interest to the chosen 'months'.
+    Simple interest approximation: principal * rate * (months/12).
+    """
     try:
         principal = float(principal)
         rate = float(interest_rate)
-        interest = principal * rate * (9/12)
+        interest = principal * rate * (months / 12)
         total = principal + interest
         return round(total, 2)
     except:
@@ -86,16 +94,16 @@ class InvestmentApp:
         self.main_frame = ctk.CTkFrame(self.master, corner_radius=10)
         self.main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Treeview style overrides for larger/bold text
+        # Treeview style overrides for bigger/bold text
         style = ttk.Style(self.main_frame)
         style.configure("Treeview.Heading", font=("Helvetica", 12, "bold"))
         style.configure("Treeview", font=("Helvetica", 11, "bold"))
 
+        # Define columns
         self.columns = [
             COLUMN_FIRST_NAME, COLUMN_LAST_NAME, COLUMN_PROJECT_NAME,
-            COLUMN_ORIGIN_DATE, COLUMN_MATURITY_DATE,
-            COLUMN_PRINCIPAL, COLUMN_INTEREST_RATE,
-            COLUMN_PRINCIPAL_PLUS_INTEREST
+            COLUMN_ORIGIN_DATE, COLUMN_MONTHS_TO_MATURITY, COLUMN_MATURITY_DATE,
+            COLUMN_PRINCIPAL, COLUMN_INTEREST_RATE, COLUMN_PRINCIPAL_PLUS_INTEREST
         ]
 
         self.tree = ttk.Treeview(
@@ -113,6 +121,7 @@ class InvestmentApp:
         self.tree.heading(COLUMN_LAST_NAME, text="Last Name")
         self.tree.heading(COLUMN_PROJECT_NAME, text="Project Name")
         self.tree.heading(COLUMN_ORIGIN_DATE, text="Origin Date")
+        self.tree.heading(COLUMN_MONTHS_TO_MATURITY, text="Months")
         self.tree.heading(COLUMN_MATURITY_DATE, text="Maturity Date")
         self.tree.heading(COLUMN_PRINCIPAL, text="Principal")
         self.tree.heading(COLUMN_INTEREST_RATE, text="Interest Rate")
@@ -128,7 +137,7 @@ class InvestmentApp:
         self.tree.configure(yscroll=scrollbar.set)
         scrollbar.pack(side="right", fill="y")
 
-        # Populate the tree
+        # Populate tree
         self.load_tree()
 
         # Buttons + Search Frame
@@ -159,13 +168,11 @@ class InvestmentApp:
         self.reset_btn = ctk.CTkButton(self.btn_frame, text="Reset", command=self.reset_view)
         self.reset_btn.pack(side="left", padx=(0, 5))
 
-
     def load_tree(self, df=None):
         """
         Clear and repopulate the Treeview. 
         Highlights rows in red if maturity <= 7 days away or if past due.
         """
-        # Clear existing items
         for row in self.tree.get_children():
             self.tree.delete(row)
 
@@ -173,15 +180,11 @@ class InvestmentApp:
             df = self.df
 
         for _, row_data in df.iterrows():
-            # Default row style
             row_tags = ()
-
             maturity_str = row_data.get(COLUMN_MATURITY_DATE, "")
             try:
                 maturity_dt = datetime.strptime(maturity_str, "%Y-%m-%d")
                 days_to_maturity = (maturity_dt - datetime.now()).days
-                # If maturity is a week or less away (days_to_maturity <= 7) 
-                # OR it's already past due (days_to_maturity < 0), highlight in red
                 if days_to_maturity <= 7:
                     row_tags = ("alert",)
             except:
@@ -195,6 +198,7 @@ class InvestmentApp:
                     row_data.get(COLUMN_LAST_NAME, ""),
                     row_data.get(COLUMN_PROJECT_NAME, ""),
                     row_data.get(COLUMN_ORIGIN_DATE, ""),
+                    row_data.get(COLUMN_MONTHS_TO_MATURITY, ""),
                     row_data.get(COLUMN_MATURITY_DATE, ""),
                     row_data.get(COLUMN_PRINCIPAL, ""),
                     row_data.get(COLUMN_INTEREST_RATE, ""),
@@ -202,7 +206,6 @@ class InvestmentApp:
                 ),
                 tags=row_tags
             )
-
 
     def add_entry(self):
         EntryWindow(self.master, self, mode="add")
@@ -229,10 +232,11 @@ class InvestmentApp:
                 (self.df[COLUMN_LAST_NAME] == item_values[1]) &
                 (self.df[COLUMN_PROJECT_NAME] == item_values[2]) &
                 (self.df[COLUMN_ORIGIN_DATE].astype(str) == str(item_values[3])) &
-                (self.df[COLUMN_MATURITY_DATE].astype(str) == str(item_values[4])) &
-                (self.df[COLUMN_PRINCIPAL].astype(str) == str(item_values[5])) &
-                (self.df[COLUMN_INTEREST_RATE].astype(str) == str(item_values[6])) &
-                (self.df[COLUMN_PRINCIPAL_PLUS_INTEREST].astype(str) == str(item_values[7]))
+                (self.df[COLUMN_MONTHS_TO_MATURITY].astype(str) == str(item_values[4])) &
+                (self.df[COLUMN_MATURITY_DATE].astype(str) == str(item_values[5])) &
+                (self.df[COLUMN_PRINCIPAL].astype(str) == str(item_values[6])) &
+                (self.df[COLUMN_INTEREST_RATE].astype(str) == str(item_values[7])) &
+                (self.df[COLUMN_PRINCIPAL_PLUS_INTEREST].astype(str) == str(item_values[8]))
             )
             self.df.drop(self.df[condition].index, inplace=True)
             self.tree.delete(selected_item[0])
@@ -275,31 +279,48 @@ class EntryWindow(ctk.CTkToplevel):
         lbl_ln = ctk.CTkLabel(self.frame, text="Last Name:")
         lbl_project = ctk.CTkLabel(self.frame, text="Project Name:")
         lbl_origin = ctk.CTkLabel(self.frame, text="Note Origin Date:")
+        lbl_month_slider = ctk.CTkLabel(self.frame, text="Months To Maturity:")
         lbl_principal = ctk.CTkLabel(self.frame, text="Principal:")
         lbl_interest = ctk.CTkLabel(self.frame, text="Interest Rate (decimal):")
 
         self.entry_fn = ctk.CTkEntry(self.frame, width=200)
         self.entry_ln = ctk.CTkEntry(self.frame, width=200)
         self.entry_project = ctk.CTkEntry(self.frame, width=200)
+        
         self.calendar_origin = DateEntry(self.frame, date_pattern="yyyy-mm-dd", selectmode='day', width=18)
+
+        # Slider for months. Let’s assume it goes from 1 to 60 months, for example.
+        self.slider_months = ctk.CTkSlider(self.frame, from_=1, to=60, number_of_steps=59, width=200)
+        # We'll also display the chosen months in a label or an entry. 
+        self.label_month_value = ctk.CTkLabel(self.frame, text="1")  # default is 1
+
         self.entry_principal = ctk.CTkEntry(self.frame, width=200)
         self.entry_interest = ctk.CTkEntry(self.frame, width=200)
 
+        # Layout
         lbl_fn.grid(row=0, column=0, padx=5, pady=5, sticky="e")
         lbl_ln.grid(row=1, column=0, padx=5, pady=5, sticky="e")
         lbl_project.grid(row=2, column=0, padx=5, pady=5, sticky="e")
         lbl_origin.grid(row=3, column=0, padx=5, pady=5, sticky="e")
-        lbl_principal.grid(row=4, column=0, padx=5, pady=5, sticky="e")
-        lbl_interest.grid(row=5, column=0, padx=5, pady=5, sticky="e")
+        lbl_month_slider.grid(row=4, column=0, padx=5, pady=5, sticky="e")
+        lbl_principal.grid(row=5, column=0, padx=5, pady=5, sticky="e")
+        lbl_interest.grid(row=6, column=0, padx=5, pady=5, sticky="e")
 
         self.entry_fn.grid(row=0, column=1, padx=5, pady=5)
         self.entry_ln.grid(row=1, column=1, padx=5, pady=5)
         self.entry_project.grid(row=2, column=1, padx=5, pady=5)
         self.calendar_origin.grid(row=3, column=1, padx=5, pady=5, sticky="w")
-        self.entry_principal.grid(row=4, column=1, padx=5, pady=5)
-        self.entry_interest.grid(row=5, column=1, padx=5, pady=5)
 
+        # slider + label side by side
+        self.slider_months.grid(row=4, column=1, padx=5, pady=5, sticky="w")
+        self.label_month_value.grid(row=4, column=2, padx=5, pady=5, sticky="w")
+
+        self.entry_principal.grid(row=5, column=1, padx=5, pady=5)
+        self.entry_interest.grid(row=6, column=1, padx=5, pady=5)
+
+        # If edit mode, populate fields
         if self.mode == "edit" and self.item_values:
+            # item_values: (FN, LN, Project, OriginDate, Months, MaturityDate, Principal, Rate, P+I)
             self.entry_fn.insert(0, self.item_values[0])
             self.entry_ln.insert(0, self.item_values[1])
             self.entry_project.insert(0, self.item_values[2])
@@ -308,11 +329,38 @@ class EntryWindow(ctk.CTkToplevel):
                 self.calendar_origin.set_date(origin_dt)
             except:
                 pass
-            self.entry_principal.insert(0, self.item_values[5])
-            self.entry_interest.insert(0, self.item_values[6])
+            # Set slider to whatever months are in item_values[4]
+            if self.item_values[4]:
+                try:
+                    months_val = float(self.item_values[4])
+                    if months_val < 1:
+                        months_val = 1
+                    elif months_val > 60:
+                        months_val = 60
+                    self.slider_months.set(months_val)
+                    self.label_month_value.configure(text=str(int(months_val)))
+                except:
+                    pass
+
+            self.entry_principal.insert(0, self.item_values[6])
+            self.entry_interest.insert(0, self.item_values[7])
+        else:
+            # default slider to 9 months if adding a new entry, or maybe 1
+            self.slider_months.set(9)  
+            self.label_month_value.configure(text="9")
 
         btn_action = ctk.CTkButton(self.frame, text="Save", command=self.save_entry)
-        btn_action.grid(row=6, column=0, columnspan=2, pady=10)
+        btn_action.grid(row=7, column=0, columnspan=3, pady=10)
+
+        # Bind slider event so the label updates in real time
+        self.slider_months.bind("<B1-Motion>", self.update_month_label)
+        self.slider_months.bind("<ButtonRelease-1>", self.update_month_label)
+
+
+    def update_month_label(self, event):
+        # called when slider is moved
+        current_val = int(self.slider_months.get())
+        self.label_month_value.configure(text=str(current_val))
 
     def save_entry(self):
         fn = self.entry_fn.get().strip()
@@ -320,6 +368,9 @@ class EntryWindow(ctk.CTkToplevel):
         project_name = self.entry_project.get().strip()
         origin_date_obj = self.calendar_origin.get_date()
         origin_date_str = origin_date_obj.strftime("%Y-%m-%d")
+
+        months_val = int(self.slider_months.get())
+
         principal_str = self.entry_principal.get().strip()
         interest_str = self.entry_interest.get().strip()
 
@@ -327,8 +378,10 @@ class EntryWindow(ctk.CTkToplevel):
             messagebox.showerror("Error", "All fields are required.")
             return
 
-        maturity_date_str = calculate_maturity_date(origin_date_str)
-        principal_plus_interest = calculate_principal_plus_interest(principal_str, interest_str)
+        # Calculate maturity date with the chosen months
+        maturity_date_str = calculate_maturity_date(origin_date_str, months_val)
+        # Calculate principal + interest for 'months_val'
+        principal_plus_interest = calculate_principal_plus_interest(principal_str, interest_str, months_val)
 
         if self.mode == "add":
             new_row = {
@@ -336,6 +389,7 @@ class EntryWindow(ctk.CTkToplevel):
                 COLUMN_LAST_NAME: ln,
                 COLUMN_PROJECT_NAME: project_name,
                 COLUMN_ORIGIN_DATE: origin_date_str,
+                COLUMN_MONTHS_TO_MATURITY: months_val,
                 COLUMN_MATURITY_DATE: maturity_date_str,
                 COLUMN_PRINCIPAL: float(principal_str),
                 COLUMN_INTEREST_RATE: float(interest_str),
@@ -349,10 +403,11 @@ class EntryWindow(ctk.CTkToplevel):
                 (self.app.df[COLUMN_LAST_NAME] == item_values[1]) &
                 (self.app.df[COLUMN_PROJECT_NAME] == item_values[2]) &
                 (self.app.df[COLUMN_ORIGIN_DATE].astype(str) == str(item_values[3])) &
-                (self.app.df[COLUMN_MATURITY_DATE].astype(str) == str(item_values[4])) &
-                (self.app.df[COLUMN_PRINCIPAL].astype(str) == str(item_values[5])) &
-                (self.app.df[COLUMN_INTEREST_RATE].astype(str) == str(item_values[6])) &
-                (self.app.df[COLUMN_PRINCIPAL_PLUS_INTEREST].astype(str) == str(item_values[7]))
+                (self.app.df[COLUMN_MONTHS_TO_MATURITY].astype(str) == str(item_values[4])) &
+                (self.app.df[COLUMN_MATURITY_DATE].astype(str) == str(item_values[5])) &
+                (self.app.df[COLUMN_PRINCIPAL].astype(str) == str(item_values[6])) &
+                (self.app.df[COLUMN_INTEREST_RATE].astype(str) == str(item_values[7])) &
+                (self.app.df[COLUMN_PRINCIPAL_PLUS_INTEREST].astype(str) == str(item_values[8]))
             )
             idx = self.app.df[cond].index
             if not idx.empty:
@@ -360,6 +415,7 @@ class EntryWindow(ctk.CTkToplevel):
                 self.app.df.at[idx, COLUMN_LAST_NAME] = ln
                 self.app.df.at[idx, COLUMN_PROJECT_NAME] = project_name
                 self.app.df.at[idx, COLUMN_ORIGIN_DATE] = origin_date_str
+                self.app.df.at[idx, COLUMN_MONTHS_TO_MATURITY] = months_val
                 self.app.df.at[idx, COLUMN_MATURITY_DATE] = maturity_date_str
                 self.app.df.at[idx, COLUMN_PRINCIPAL] = float(principal_str)
                 self.app.df.at[idx, COLUMN_INTEREST_RATE] = float(interest_str)
@@ -371,7 +427,7 @@ class EntryWindow(ctk.CTkToplevel):
 
 def main():
     root = ctk.CTk()
-    root.geometry("1200x700")
+    root.geometry("1100x600")  # Slightly wider for the new columns
     app = InvestmentApp(root)
     root.mainloop()
 
