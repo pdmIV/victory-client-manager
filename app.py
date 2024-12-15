@@ -6,22 +6,23 @@ from datetime import datetime, timedelta
 import os
 
 from tkcalendar import DateEntry  # pip install tkcalendar
+from fpdf import FPDF  # pip install fpdf
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
 EXCEL_FILE = "investments.xlsx"
+OUTPUT_DIR = "output"
 
 COLUMN_FIRST_NAME = "First Name"
 COLUMN_LAST_NAME = "Last Name"
 COLUMN_PROJECT_NAME = "Project Name"
 COLUMN_ORIGIN_DATE = "Note Origin Date"
-COLUMN_MONTHS_TO_MATURITY = "Months To Maturity"   # NEW COLUMN
+COLUMN_MONTHS_TO_MATURITY = "Months To Maturity"
 COLUMN_MATURITY_DATE = "Note Maturity Date"
 COLUMN_PRINCIPAL = "Principal"
 COLUMN_INTEREST_RATE = "Interest Rate"
 COLUMN_PRINCIPAL_PLUS_INTEREST = "Principal + Interest"
-
 
 def load_investments():
     """Reads the Excel file into a pandas DataFrame, ensuring all columns exist."""
@@ -46,32 +47,22 @@ def load_investments():
 
     return df
 
-
 def save_investments(df):
     """Writes the DataFrame to the Excel file."""
     df.to_excel(EXCEL_FILE, index=False)
 
-
 def calculate_maturity_date(origin_date_str, months):
-    """
-    Return maturity date string, given origin_date_str and months to maturity.
-    'months' is an int or float from the slider.
-    """
+    """Return maturity date string, given origin_date_str and months to maturity."""
     try:
         origin_date = datetime.strptime(origin_date_str, "%Y-%m-%d")
     except ValueError:
         origin_date = datetime.strptime(origin_date_str, "%m/%d/%Y")
 
-    # Approximate each month as 30 days, or do a more precise approach if desired.
     maturity_date = origin_date + timedelta(days=30 * months)
     return maturity_date.strftime("%Y-%m-%d")
 
-
 def calculate_principal_plus_interest(principal, interest_rate, months):
-    """
-    Scale interest to the chosen 'months'.
-    Simple interest approximation: principal * rate * (months/12).
-    """
+    """Simple interest approximation: principal * rate * (months/12)."""
     try:
         principal = float(principal)
         rate = float(interest_rate)
@@ -81,25 +72,77 @@ def calculate_principal_plus_interest(principal, interest_rate, months):
     except:
         return None
 
+class PDFExporter(FPDF):
+    """A simple helper class using FPDF to generate a PDF report."""
+    def header(self):
+        # Add a title at the top of the page
+        self.set_font("Arial", "B", 14)
+        self.cell(0, 10, "Client Investment Report", ln=True, align="C")
+        self.ln(5)
+
+def export_to_pdf(rows, filename):
+    """
+    Creates a letter-style PDF for each investor row in 'rows'.
+    """
+    pdf = PDFExporter()
+    
+    for row_data in rows:
+        pdf.add_page()
+        
+        pdf.set_font("Arial", "B", 14)
+        # Greeting
+        first_name = str(row_data.get(COLUMN_FIRST_NAME, ""))
+        last_name = str(row_data.get(COLUMN_LAST_NAME, ""))
+        pdf.cell(0, 10, f"Dear {first_name} {last_name},", ln=True)
+
+        pdf.ln(5)
+        pdf.set_font("Arial", size=12)
+        project_name = str(row_data.get(COLUMN_PROJECT_NAME, ""))
+        origin_date = str(row_data.get(COLUMN_ORIGIN_DATE, ""))
+        months_to_maturity = str(row_data.get(COLUMN_MONTHS_TO_MATURITY, ""))
+        maturity_date = str(row_data.get(COLUMN_MATURITY_DATE, ""))
+        principal = str(row_data.get(COLUMN_PRINCIPAL, ""))
+        rate = str(row_data.get(COLUMN_INTEREST_RATE, ""))
+        total_payoff = str(row_data.get(COLUMN_PRINCIPAL_PLUS_INTEREST, ""))
+
+        letter_body = (
+            f"Thank you for your investment in {project_name}.\n\n"
+            f"Your note originated on {origin_date} for a term of {months_to_maturity} months. "
+            f"The maturity date is {maturity_date}.\n\n"
+            f"Principal Amount: ${principal}\n"
+            f"Interest Rate: {rate}\n"
+            f"Total Expected Payout at Maturity: ${total_payoff}\n\n"
+            "We appreciate your continued support. If you have any questions regarding your "
+            "investment, please feel free to contact us.\n\n"
+            "Sincerely,\n"
+            "Your Investment Firm"
+        )
+        pdf.multi_cell(0, 10, letter_body, align="L")
+
+        pdf.ln(10)
+        pdf.cell(0, 10, "---------------------------------", ln=True, align="C")
+        pdf.cell(0, 10, "Authorized Signature", ln=True, align="C")
+
+    pdf.output(filename)
+    print(f"PDF Exported: {filename}")
+
 
 class InvestmentApp:
     def __init__(self, master):
         self.master = master
         self.master.title("Client Investments Manager")
 
-        # Load DataFrame from Excel
+        # Load DataFrame
         self.df = load_investments()
 
         # Main frame
         self.main_frame = ctk.CTkFrame(self.master, corner_radius=10)
         self.main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Treeview style overrides for bigger/bold text
         style = ttk.Style(self.main_frame)
         style.configure("Treeview.Heading", font=("Helvetica", 12, "bold"))
         style.configure("Treeview", font=("Helvetica", 11, "bold"))
 
-        # Define columns
         self.columns = [
             COLUMN_FIRST_NAME, COLUMN_LAST_NAME, COLUMN_PROJECT_NAME,
             COLUMN_ORIGIN_DATE, COLUMN_MONTHS_TO_MATURITY, COLUMN_MATURITY_DATE,
@@ -113,34 +156,21 @@ class InvestmentApp:
             height=15, 
             style="Treeview"
         )
-
-        # Define red highlight tag
         self.tree.tag_configure("alert", background="red", foreground="white")
 
-        self.tree.heading(COLUMN_FIRST_NAME, text="First Name")
-        self.tree.heading(COLUMN_LAST_NAME, text="Last Name")
-        self.tree.heading(COLUMN_PROJECT_NAME, text="Project Name")
-        self.tree.heading(COLUMN_ORIGIN_DATE, text="Origin Date")
-        self.tree.heading(COLUMN_MONTHS_TO_MATURITY, text="Months")
-        self.tree.heading(COLUMN_MATURITY_DATE, text="Maturity Date")
-        self.tree.heading(COLUMN_PRINCIPAL, text="Principal")
-        self.tree.heading(COLUMN_INTEREST_RATE, text="Interest Rate")
-        self.tree.heading(COLUMN_PRINCIPAL_PLUS_INTEREST, text="Principal + Interest")
-
         for col in self.columns:
+            self.tree.heading(col, text=col)
             self.tree.column(col, width=130, anchor=tk.CENTER)
 
         self.tree.pack(side="left", fill="both", expand=True)
 
-        # Scrollbar
         scrollbar = ttk.Scrollbar(self.main_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscroll=scrollbar.set)
         scrollbar.pack(side="right", fill="y")
 
-        # Populate tree
         self.load_tree()
 
-        # Buttons + Search Frame
+        # Frame for Buttons, Search, Export
         self.btn_frame = ctk.CTkFrame(self.master, corner_radius=10)
         self.btn_frame.pack(fill="x", padx=10, pady=5)
 
@@ -168,11 +198,18 @@ class InvestmentApp:
         self.reset_btn = ctk.CTkButton(self.btn_frame, text="Reset", command=self.reset_view)
         self.reset_btn.pack(side="left", padx=(0, 5))
 
+        # --- NEW: Export Option and Button ---
+        self.export_options = ["Export Selected Client", "Export Matured Clients", "Export All Clients"]
+        self.export_var = ctk.StringVar(value=self.export_options[0])
+        self.export_menu = ctk.CTkOptionMenu(self.btn_frame, values=self.export_options, variable=self.export_var)
+        self.export_menu.pack(side="left", padx=(20,5))
+
+        self.export_btn = ctk.CTkButton(self.btn_frame, text="Export to PDF", command=self.on_export_button)
+        self.export_btn.pack(side="left", padx=(0,5))
+
+
     def load_tree(self, df=None):
-        """
-        Clear and repopulate the Treeview. 
-        Highlights rows in red if maturity <= 7 days away or if past due.
-        """
+        """Clear and repopulate Treeview. Highlight rows in red if maturity <= 7 days away or past due."""
         for row in self.tree.get_children():
             self.tree.delete(row)
 
@@ -259,6 +296,108 @@ class InvestmentApp:
         self.search_entry.delete(0, tk.END)
         self.load_tree(self.df)
 
+    # -------- NEW Export Logic --------
+    def on_export_button(self):
+        export_choice = self.export_var.get()
+        if not os.path.exists(OUTPUT_DIR):
+            os.makedirs(OUTPUT_DIR)
+
+        if export_choice == "Export Selected Client":
+            selected_item = self.tree.selection()
+            if not selected_item:
+                messagebox.showwarning("Warning", "Select a client row to export.")
+                return
+            item_values = self.tree.item(selected_item[0], "values")
+            # Convert item_values to a dictionary for export
+            row_dict = self.item_values_to_dict(item_values)
+            rows_to_export = [row_dict]
+            pdf_filename = os.path.join(OUTPUT_DIR, "selected_client.pdf")
+            export_to_pdf(rows_to_export, pdf_filename)
+            messagebox.showinfo("Exported", f"PDF exported: {pdf_filename}")
+
+        elif export_choice == "Export Matured Clients":
+            # Find all matured clients (maturity date < today)
+            matured_condition = []
+            matured_rows = []
+            now = datetime.now()
+            for idx, row_data in self.df.iterrows():
+                maturity_str = str(row_data.get(COLUMN_MATURITY_DATE, ""))
+                try:
+                    maturity_dt = datetime.strptime(maturity_str, "%Y-%m-%d")
+                    if maturity_dt < now:
+                        # This row is matured
+                        matured_rows.append(row_data)
+                        matured_condition.append(idx)
+                except:
+                    pass
+            
+            if not matured_rows:
+                messagebox.showinfo("No Matured Clients", "No clients found with matured notes.")
+                return
+
+            # Rollover logic: principal = principal + interest, 
+            # new origin date = old maturity date, recalc new maturity date 
+            # using the same months to maturity.
+            for idx in matured_condition:
+                old_principal = float(self.df.at[idx, COLUMN_PRINCIPAL])
+                old_interest_rate = float(self.df.at[idx, COLUMN_INTEREST_RATE])
+                old_principal_plus_interest = float(self.df.at[idx, COLUMN_PRINCIPAL_PLUS_INTEREST])
+                old_maturity_date_str = self.df.at[idx, COLUMN_MATURITY_DATE]
+                old_months = float(self.df.at[idx, COLUMN_MONTHS_TO_MATURITY])
+                # roll over principal => new note starts at old maturity date
+                new_origin_date_str = old_maturity_date_str
+                new_principal = old_principal_plus_interest  # principal + interest
+                # recalc new maturity
+                new_maturity_date_str = calculate_maturity_date(new_origin_date_str, old_months)
+                # recalc principal + interest
+                new_p_plus_i = calculate_principal_plus_interest(new_principal, old_interest_rate, old_months)
+
+                # Update DataFrame
+                self.df.at[idx, COLUMN_ORIGIN_DATE] = new_origin_date_str
+                self.df.at[idx, COLUMN_PRINCIPAL] = new_principal
+                self.df.at[idx, COLUMN_MATURITY_DATE] = new_maturity_date_str
+                self.df.at[idx, COLUMN_PRINCIPAL_PLUS_INTEREST] = new_p_plus_i
+
+            # Save the updated DataFrame
+            save_investments(self.df)
+            self.load_tree()
+
+            # Convert matured_rows to dicts for export
+            rows_dict_list = []
+            for row_data in matured_rows:
+                rows_dict_list.append(row_data.to_dict())
+
+            pdf_filename = os.path.join(OUTPUT_DIR, "matured_clients.pdf")
+            export_to_pdf(rows_dict_list, pdf_filename)
+            messagebox.showinfo("Exported", f"Matured clients exported and rolled over.\nPDF: {pdf_filename}")
+
+        else:  # Export All Clients
+            all_rows = []
+            for _, row_data in self.df.iterrows():
+                all_rows.append(row_data.to_dict())
+
+            pdf_filename = os.path.join(OUTPUT_DIR, "all_clients.pdf")
+            export_to_pdf(all_rows, pdf_filename)
+            messagebox.showinfo("Exported", f"All clients exported.\nPDF: {pdf_filename}")
+
+    def item_values_to_dict(self, item_values):
+        """
+        Convert the tuple of item values from the TreeView back into a dictionary
+        matching the DataFrame columns.
+        """
+        # item_values format = (FirstName, LastName, ProjectName, OriginDate, Months, MaturityDate, Principal, Rate, P+I)
+        row_dict = {
+            COLUMN_FIRST_NAME: item_values[0],
+            COLUMN_LAST_NAME: item_values[1],
+            COLUMN_PROJECT_NAME: item_values[2],
+            COLUMN_ORIGIN_DATE: item_values[3],
+            COLUMN_MONTHS_TO_MATURITY: item_values[4],
+            COLUMN_MATURITY_DATE: item_values[5],
+            COLUMN_PRINCIPAL: item_values[6],
+            COLUMN_INTEREST_RATE: item_values[7],
+            COLUMN_PRINCIPAL_PLUS_INTEREST: item_values[8]
+        }
+        return row_dict
 
 class EntryWindow(ctk.CTkToplevel):
     def __init__(self, master, app, mode="add", item_values=None):
@@ -286,18 +425,14 @@ class EntryWindow(ctk.CTkToplevel):
         self.entry_fn = ctk.CTkEntry(self.frame, width=200)
         self.entry_ln = ctk.CTkEntry(self.frame, width=200)
         self.entry_project = ctk.CTkEntry(self.frame, width=200)
-        
         self.calendar_origin = DateEntry(self.frame, date_pattern="yyyy-mm-dd", selectmode='day', width=18)
 
-        # Slider for months. Let’s assume it goes from 1 to 60 months, for example.
         self.slider_months = ctk.CTkSlider(self.frame, from_=1, to=60, number_of_steps=59, width=200)
-        # We'll also display the chosen months in a label or an entry. 
-        self.label_month_value = ctk.CTkLabel(self.frame, text="1")  # default is 1
+        self.label_month_value = ctk.CTkLabel(self.frame, text="1")
 
         self.entry_principal = ctk.CTkEntry(self.frame, width=200)
         self.entry_interest = ctk.CTkEntry(self.frame, width=200)
 
-        # Layout
         lbl_fn.grid(row=0, column=0, padx=5, pady=5, sticky="e")
         lbl_ln.grid(row=1, column=0, padx=5, pady=5, sticky="e")
         lbl_project.grid(row=2, column=0, padx=5, pady=5, sticky="e")
@@ -311,14 +446,12 @@ class EntryWindow(ctk.CTkToplevel):
         self.entry_project.grid(row=2, column=1, padx=5, pady=5)
         self.calendar_origin.grid(row=3, column=1, padx=5, pady=5, sticky="w")
 
-        # slider + label side by side
         self.slider_months.grid(row=4, column=1, padx=5, pady=5, sticky="w")
         self.label_month_value.grid(row=4, column=2, padx=5, pady=5, sticky="w")
 
         self.entry_principal.grid(row=5, column=1, padx=5, pady=5)
         self.entry_interest.grid(row=6, column=1, padx=5, pady=5)
 
-        # If edit mode, populate fields
         if self.mode == "edit" and self.item_values:
             # item_values: (FN, LN, Project, OriginDate, Months, MaturityDate, Principal, Rate, P+I)
             self.entry_fn.insert(0, self.item_values[0])
@@ -329,36 +462,29 @@ class EntryWindow(ctk.CTkToplevel):
                 self.calendar_origin.set_date(origin_dt)
             except:
                 pass
-            # Set slider to whatever months are in item_values[4]
             if self.item_values[4]:
                 try:
                     months_val = float(self.item_values[4])
-                    if months_val < 1:
-                        months_val = 1
-                    elif months_val > 60:
-                        months_val = 60
+                    if months_val < 1: months_val = 1
+                    if months_val > 60: months_val = 60
                     self.slider_months.set(months_val)
                     self.label_month_value.configure(text=str(int(months_val)))
                 except:
                     pass
-
             self.entry_principal.insert(0, self.item_values[6])
             self.entry_interest.insert(0, self.item_values[7])
         else:
-            # default slider to 9 months if adding a new entry, or maybe 1
-            self.slider_months.set(9)  
+            # default slider to 9 months
+            self.slider_months.set(9)
             self.label_month_value.configure(text="9")
 
         btn_action = ctk.CTkButton(self.frame, text="Save", command=self.save_entry)
         btn_action.grid(row=7, column=0, columnspan=3, pady=10)
 
-        # Bind slider event so the label updates in real time
         self.slider_months.bind("<B1-Motion>", self.update_month_label)
         self.slider_months.bind("<ButtonRelease-1>", self.update_month_label)
 
-
     def update_month_label(self, event):
-        # called when slider is moved
         current_val = int(self.slider_months.get())
         self.label_month_value.configure(text=str(current_val))
 
@@ -378,9 +504,7 @@ class EntryWindow(ctk.CTkToplevel):
             messagebox.showerror("Error", "All fields are required.")
             return
 
-        # Calculate maturity date with the chosen months
         maturity_date_str = calculate_maturity_date(origin_date_str, months_val)
-        # Calculate principal + interest for 'months_val'
         principal_plus_interest = calculate_principal_plus_interest(principal_str, interest_str, months_val)
 
         if self.mode == "add":
@@ -427,10 +551,9 @@ class EntryWindow(ctk.CTkToplevel):
 
 def main():
     root = ctk.CTk()
-    root.geometry("1100x600")  # Slightly wider for the new columns
+    root.geometry("1500x700")
     app = InvestmentApp(root)
     root.mainloop()
-
 
 if __name__ == "__main__":
     main()
