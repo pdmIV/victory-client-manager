@@ -1,29 +1,33 @@
+import customtkinter as ctk
 import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
 from datetime import datetime, timedelta
 import os
 
+# Configure customtkinter default theme/appearance
+ctk.set_appearance_mode("System")  # "Dark" or "Light" or "System"
+ctk.set_default_color_theme("blue")  # "blue", "green", or "dark-blue"
+
 EXCEL_FILE = "investments.xlsx"
 
 COLUMN_FIRST_NAME = "First Name"
 COLUMN_LAST_NAME = "Last Name"
+COLUMN_PROJECT_NAME = "Project Name"
 COLUMN_ORIGIN_DATE = "Note Origin Date"
 COLUMN_MATURITY_DATE = "Note Maturity Date"
 COLUMN_PRINCIPAL = "Principal"
 COLUMN_INTEREST_RATE = "Interest Rate"
 COLUMN_PRINCIPAL_PLUS_INTEREST = "Principal + Interest"
-COLUMN_PROJECT_NAME = "Project Name"
+
 
 def load_investments():
     """Reads the Excel file into a pandas DataFrame, ensuring all columns exist."""
     if not os.path.exists(EXCEL_FILE):
         df = pd.DataFrame(columns=[
-            COLUMN_FIRST_NAME, COLUMN_LAST_NAME,
-            COLUMN_PROJECT_NAME,  # Include Project Name
-            COLUMN_ORIGIN_DATE, COLUMN_MATURITY_DATE,
-            COLUMN_PRINCIPAL, COLUMN_INTEREST_RATE,
-            COLUMN_PRINCIPAL_PLUS_INTEREST
+            COLUMN_FIRST_NAME, COLUMN_LAST_NAME, COLUMN_PROJECT_NAME,
+            COLUMN_ORIGIN_DATE, COLUMN_MATURITY_DATE, COLUMN_PRINCIPAL,
+            COLUMN_INTEREST_RATE, COLUMN_PRINCIPAL_PLUS_INTEREST
         ])
         df.to_excel(EXCEL_FILE, index=False)
         return df
@@ -40,9 +44,11 @@ def load_investments():
 
     return df
 
+
 def save_investments(df):
     """Writes the DataFrame to the Excel file."""
     df.to_excel(EXCEL_FILE, index=False)
+
 
 def calculate_maturity_date(origin_date_str):
     """Given an origin date string, return ~9-month later maturity date as string."""
@@ -54,8 +60,9 @@ def calculate_maturity_date(origin_date_str):
     maturity_date = origin_date + timedelta(days=9*30)  # approximate 9 months as 270 days
     return maturity_date.strftime("%Y-%m-%d")
 
+
 def calculate_principal_plus_interest(principal, interest_rate):
-    """Approximate 9-month simple interest on principal at given rate."""
+    """Approximate 9-month simple interest on principal at given annual rate."""
     try:
         principal = float(principal)
         rate = float(interest_rate)
@@ -65,17 +72,18 @@ def calculate_principal_plus_interest(principal, interest_rate):
     except:
         return None
 
+
 class InvestmentApp:
     def __init__(self, master):
         self.master = master
         self.master.title("Client Investments Manager")
 
-        # Load the data from Excel
+        # Load DataFrame from Excel
         self.df = load_investments()
 
-        # Main Frame
-        self.main_frame = ttk.Frame(self.master, padding="10")
-        self.main_frame.pack(fill=tk.BOTH, expand=True)
+        # Main frame (ctk.CTkFrame instead of ttk.Frame)
+        self.main_frame = ctk.CTkFrame(self.master, corner_radius=10)
+        self.main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
         # Define columns for the Treeview
         self.columns = [
@@ -85,6 +93,7 @@ class InvestmentApp:
             COLUMN_PRINCIPAL_PLUS_INTEREST
         ]
 
+        # We still use the standard ttk Treeview (since customtkinter doesn't have its own table widget)
         self.tree = ttk.Treeview(self.main_frame, columns=self.columns, show="headings", height=15)
 
         self.tree.heading(COLUMN_FIRST_NAME, text="First Name")
@@ -99,52 +108,48 @@ class InvestmentApp:
         for col in self.columns:
             self.tree.column(col, width=120, anchor=tk.CENTER)
 
-        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.tree.pack(side="left", fill="both", expand=True)
 
-        # Scrollbar
+        # Scrollbar (standard tk or customtkinter.CTkScrollbar also possible)
         scrollbar = ttk.Scrollbar(self.main_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscroll=scrollbar.set)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        scrollbar.pack(side="right", fill="y")
 
-        # Populate the tree with **all** rows initially
+        # Populate the tree
         self.load_tree()
 
         # Buttons + Search Frame
-        self.btn_frame = ttk.Frame(self.master, padding="10")
-        self.btn_frame.pack(fill=tk.X)
+        self.btn_frame = ctk.CTkFrame(self.master, corner_radius=10)
+        self.btn_frame.pack(fill="x", padx=10, pady=5)
 
-        # Add Entry button
-        self.add_btn = ttk.Button(self.btn_frame, text="Add Entry", command=self.add_entry)
-        self.add_btn.pack(side=tk.LEFT, padx=(0, 5))
+        self.add_btn = ctk.CTkButton(self.btn_frame, text="Add Entry", command=self.add_entry)
+        self.add_btn.pack(side="left", padx=(0, 5))
 
-        # Edit Entry button
-        self.edit_btn = ttk.Button(self.btn_frame, text="Edit Entry", command=self.edit_entry)
-        self.edit_btn.pack(side=tk.LEFT, padx=(0, 5))
+        self.edit_btn = ctk.CTkButton(self.btn_frame, text="Edit Entry", command=self.edit_entry)
+        self.edit_btn.pack(side="left", padx=(0, 5))
 
-        # Delete Entry button
-        self.del_btn = ttk.Button(self.btn_frame, text="Delete Entry", command=self.del_entry)
-        self.del_btn.pack(side=tk.LEFT, padx=(0, 5))
+        self.del_btn = ctk.CTkButton(self.btn_frame, text="Delete Entry", fg_color="red", command=self.del_entry)
+        self.del_btn.pack(side="left", padx=(0, 5))
 
-        # Save button
-        self.save_btn = ttk.Button(self.btn_frame, text="Save to Excel", command=self.save_changes)
-        self.save_btn.pack(side=tk.LEFT, padx=(0, 5))
+        self.save_btn = ctk.CTkButton(self.btn_frame, text="Save to Excel", command=self.save_changes)
+        self.save_btn.pack(side="left", padx=(0, 15))
 
-        # ----- NEW: Search Section -----
-        ttk.Label(self.btn_frame, text="Search Project Name:").pack(side=tk.LEFT, padx=(20, 5))
-        self.search_entry = ttk.Entry(self.btn_frame)
-        self.search_entry.pack(side=tk.LEFT, padx=(0, 5))
-        self.search_btn = ttk.Button(self.btn_frame, text="Search", command=self.search_by_project_name)
-        self.search_btn.pack(side=tk.LEFT, padx=(0, 5))
-        self.reset_btn = ttk.Button(self.btn_frame, text="Reset", command=self.reset_view)
-        self.reset_btn.pack(side=tk.LEFT, padx=(0, 5))
+        # Search
+        self.search_label = ctk.CTkLabel(self.btn_frame, text="Search Project Name:")
+        self.search_label.pack(side="left", padx=(20, 5))
+
+        self.search_entry = ctk.CTkEntry(self.btn_frame, width=140)
+        self.search_entry.pack(side="left", padx=(0, 5))
+
+        self.search_btn = ctk.CTkButton(self.btn_frame, text="Search", command=self.search_by_project_name)
+        self.search_btn.pack(side="left", padx=(0, 5))
+
+        self.reset_btn = ctk.CTkButton(self.btn_frame, text="Reset", command=self.reset_view)
+        self.reset_btn.pack(side="left", padx=(0, 5))
+
 
     def load_tree(self, df=None):
-        """
-        Clears the Treeview and repopulates it. 
-        If `df` is None, it loads from self.df (the full dataset).
-        If a subset df is passed (filtered), it loads just those rows.
-        """
-        # Clear current rows
+        """Clear and repopulate the Treeview. If df is None, use self.df."""
         for row in self.tree.get_children():
             self.tree.delete(row)
 
@@ -200,32 +205,22 @@ class InvestmentApp:
         save_investments(self.df)
         messagebox.showinfo("Saved", "Changes saved to Excel file successfully.")
 
-    # ------------------ NEW METHODS FOR SEARCH ------------------
     def search_by_project_name(self):
-        """
-        Filter the DataFrame by the project name the user typed in,
-        and then display only the matching rows in the Treeview.
-        """
         query = self.search_entry.get().strip()
         if not query:
             messagebox.showwarning("Warning", "Enter a project name to search.")
             return
 
-        # Case-insensitive 'contains' filter for Project Name
         filtered_df = self.df[self.df[COLUMN_PROJECT_NAME]
                               .str.contains(query, case=False, na=False)]
         self.load_tree(filtered_df)
 
     def reset_view(self):
-        """
-        Clear the search box and reload the full DataFrame in the Treeview.
-        """
         self.search_entry.delete(0, tk.END)
-        self.load_tree(df=self.df)
-    # -----------------------------------------------------------
+        self.load_tree(self.df)
 
 
-class EntryWindow(tk.Toplevel):
+class EntryWindow(ctk.CTkToplevel):
     def __init__(self, master, app, mode="add", item_values=None):
         super().__init__(master)
         self.app = app
@@ -237,20 +232,27 @@ class EntryWindow(tk.Toplevel):
         else:
             self.title("Edit Entry")
 
-        lbl_fn = ttk.Label(self, text="First Name:")
-        lbl_ln = ttk.Label(self, text="Last Name:")
-        lbl_project = ttk.Label(self, text="Project Name:")
-        lbl_origin = ttk.Label(self, text="Note Origin Date (YYYY-MM-DD):")
-        lbl_principal = ttk.Label(self, text="Principal:")
-        lbl_interest = ttk.Label(self, text="Interest Rate (decimal):")
+        # CTk Frame
+        self.frame = ctk.CTkFrame(self, corner_radius=10)
+        self.frame.pack(padx=20, pady=20, fill="both", expand=True)
 
-        self.entry_fn = ttk.Entry(self)
-        self.entry_ln = ttk.Entry(self)
-        self.entry_project = ttk.Entry(self)
-        self.entry_origin = ttk.Entry(self)
-        self.entry_principal = ttk.Entry(self)
-        self.entry_interest = ttk.Entry(self)
+        # Labels
+        lbl_fn = ctk.CTkLabel(self.frame, text="First Name:")
+        lbl_ln = ctk.CTkLabel(self.frame, text="Last Name:")
+        lbl_project = ctk.CTkLabel(self.frame, text="Project Name:")
+        lbl_origin = ctk.CTkLabel(self.frame, text="Note Origin Date (YYYY-MM-DD):")
+        lbl_principal = ctk.CTkLabel(self.frame, text="Principal:")
+        lbl_interest = ctk.CTkLabel(self.frame, text="Interest Rate (decimal):")
 
+        # Entry fields
+        self.entry_fn = ctk.CTkEntry(self.frame, width=200)
+        self.entry_ln = ctk.CTkEntry(self.frame, width=200)
+        self.entry_project = ctk.CTkEntry(self.frame, width=200)
+        self.entry_origin = ctk.CTkEntry(self.frame, width=200)
+        self.entry_principal = ctk.CTkEntry(self.frame, width=200)
+        self.entry_interest = ctk.CTkEntry(self.frame, width=200)
+
+        # Grid
         lbl_fn.grid(row=0, column=0, padx=5, pady=5, sticky="e")
         lbl_ln.grid(row=1, column=0, padx=5, pady=5, sticky="e")
         lbl_project.grid(row=2, column=0, padx=5, pady=5, sticky="e")
@@ -267,7 +269,7 @@ class EntryWindow(tk.Toplevel):
 
         # If edit mode, populate fields
         if self.mode == "edit" and self.item_values:
-            # item_values: (0-FN, 1-LN, 2-Project, 3-Origin, 4-Maturity, 5-Principal, 6-Rate, 7-Principal+Interest)
+            # item_values: (FN, LN, Project, Origin, Maturity, Principal, Rate, P+I)
             self.entry_fn.insert(0, self.item_values[0])
             self.entry_ln.insert(0, self.item_values[1])
             self.entry_project.insert(0, self.item_values[2])
@@ -275,7 +277,7 @@ class EntryWindow(tk.Toplevel):
             self.entry_principal.insert(0, self.item_values[5])
             self.entry_interest.insert(0, self.item_values[6])
 
-        btn_action = ttk.Button(self, text="Save", command=self.save_entry)
+        btn_action = ctk.CTkButton(self.frame, text="Save", command=self.save_entry)
         btn_action.grid(row=6, column=0, columnspan=2, pady=10)
 
     def save_entry(self):
@@ -304,7 +306,6 @@ class EntryWindow(tk.Toplevel):
                 COLUMN_INTEREST_RATE: float(interest_str),
                 COLUMN_PRINCIPAL_PLUS_INTEREST: principal_plus_interest
             }
-            # Use pd.concat() on pandas 2.0+ (append() is removed)
             self.app.df = pd.concat([self.app.df, pd.DataFrame([new_row])], ignore_index=True)
         else:
             item_values = self.item_values
@@ -329,14 +330,16 @@ class EntryWindow(tk.Toplevel):
                 self.app.df.at[idx, COLUMN_INTEREST_RATE] = float(interest_str)
                 self.app.df.at[idx, COLUMN_PRINCIPAL_PLUS_INTEREST] = principal_plus_interest
 
-        # Reload the table with updated data
         self.app.load_tree()
         self.destroy()
 
+
 def main():
-    root = tk.Tk()
+    root = ctk.CTk()
+    root.geometry("1000x600")  # Example window size
     app = InvestmentApp(root)
     root.mainloop()
+
 
 if __name__ == "__main__":
     main()
