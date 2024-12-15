@@ -5,8 +5,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 import os
 
-# Configure customtkinter default theme/appearance
-ctk.set_appearance_mode("System")  # "Dark" or "Light" or "System"
+# NEW: import tkcalendar
+from tkcalendar import DateEntry  # pip install tkcalendar
+
+ctk.set_appearance_mode("System")  # "Dark", "Light", or "System"
 ctk.set_default_color_theme("blue")  # "blue", "green", or "dark-blue"
 
 EXCEL_FILE = "investments.xlsx"
@@ -51,18 +53,18 @@ def save_investments(df):
 
 
 def calculate_maturity_date(origin_date_str):
-    """Given an origin date string, return ~9-month later maturity date as string."""
+    """Given an origin date string (YYYY-MM-DD), return ~9-month later maturity date as string."""
     try:
         origin_date = datetime.strptime(origin_date_str, "%Y-%m-%d")
     except ValueError:
-        # Attempt different common format
+        # Attempt different common format (e.g., 'MM/DD/YYYY')
         origin_date = datetime.strptime(origin_date_str, "%m/%d/%Y")
     maturity_date = origin_date + timedelta(days=9*30)  # approximate 9 months as 270 days
     return maturity_date.strftime("%Y-%m-%d")
 
 
 def calculate_principal_plus_interest(principal, interest_rate):
-    """Approximate 9-month simple interest on principal at given annual rate."""
+    """Approximate 9-month simple interest on principal at given annual interest rate."""
     try:
         principal = float(principal)
         rate = float(interest_rate)
@@ -81,7 +83,7 @@ class InvestmentApp:
         # Load DataFrame from Excel
         self.df = load_investments()
 
-        # Main frame (ctk.CTkFrame instead of ttk.Frame)
+        # Main frame (ctk.CTkFrame)
         self.main_frame = ctk.CTkFrame(self.master, corner_radius=10)
         self.main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
@@ -93,7 +95,7 @@ class InvestmentApp:
             COLUMN_PRINCIPAL_PLUS_INTEREST
         ]
 
-        # We still use the standard ttk Treeview (since customtkinter doesn't have its own table widget)
+        # Standard ttk Treeview
         self.tree = ttk.Treeview(self.main_frame, columns=self.columns, show="headings", height=15)
 
         self.tree.heading(COLUMN_FIRST_NAME, text="First Name")
@@ -110,7 +112,7 @@ class InvestmentApp:
 
         self.tree.pack(side="left", fill="both", expand=True)
 
-        # Scrollbar (standard tk or customtkinter.CTkScrollbar also possible)
+        # Scrollbar
         scrollbar = ttk.Scrollbar(self.main_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscroll=scrollbar.set)
         scrollbar.pack(side="right", fill="y")
@@ -146,7 +148,6 @@ class InvestmentApp:
 
         self.reset_btn = ctk.CTkButton(self.btn_frame, text="Reset", command=self.reset_view)
         self.reset_btn.pack(side="left", padx=(0, 5))
-
 
     def load_tree(self, df=None):
         """Clear and repopulate the Treeview. If df is None, use self.df."""
@@ -232,7 +233,6 @@ class EntryWindow(ctk.CTkToplevel):
         else:
             self.title("Edit Entry")
 
-        # CTk Frame
         self.frame = ctk.CTkFrame(self, corner_radius=10)
         self.frame.pack(padx=20, pady=20, fill="both", expand=True)
 
@@ -240,7 +240,7 @@ class EntryWindow(ctk.CTkToplevel):
         lbl_fn = ctk.CTkLabel(self.frame, text="First Name:")
         lbl_ln = ctk.CTkLabel(self.frame, text="Last Name:")
         lbl_project = ctk.CTkLabel(self.frame, text="Project Name:")
-        lbl_origin = ctk.CTkLabel(self.frame, text="Note Origin Date (YYYY-MM-DD):")
+        lbl_origin = ctk.CTkLabel(self.frame, text="Note Origin Date:")
         lbl_principal = ctk.CTkLabel(self.frame, text="Principal:")
         lbl_interest = ctk.CTkLabel(self.frame, text="Interest Rate (decimal):")
 
@@ -248,7 +248,16 @@ class EntryWindow(ctk.CTkToplevel):
         self.entry_fn = ctk.CTkEntry(self.frame, width=200)
         self.entry_ln = ctk.CTkEntry(self.frame, width=200)
         self.entry_project = ctk.CTkEntry(self.frame, width=200)
-        self.entry_origin = ctk.CTkEntry(self.frame, width=200)
+
+        # REPLACE the origin CTkEntry with DateEntry from tkcalendar
+        # (We embed it in the same frame, so the style might differ from CTk widgets.)
+        self.calendar_origin = DateEntry(
+            self.frame, 
+            date_pattern="yyyy-mm-dd",  # store in a consistent format
+            selectmode='day',
+            width=18
+        )
+
         self.entry_principal = ctk.CTkEntry(self.frame, width=200)
         self.entry_interest = ctk.CTkEntry(self.frame, width=200)
 
@@ -263,7 +272,7 @@ class EntryWindow(ctk.CTkToplevel):
         self.entry_fn.grid(row=0, column=1, padx=5, pady=5)
         self.entry_ln.grid(row=1, column=1, padx=5, pady=5)
         self.entry_project.grid(row=2, column=1, padx=5, pady=5)
-        self.entry_origin.grid(row=3, column=1, padx=5, pady=5)
+        self.calendar_origin.grid(row=3, column=1, padx=5, pady=5, sticky="w")
         self.entry_principal.grid(row=4, column=1, padx=5, pady=5)
         self.entry_interest.grid(row=5, column=1, padx=5, pady=5)
 
@@ -273,7 +282,12 @@ class EntryWindow(ctk.CTkToplevel):
             self.entry_fn.insert(0, self.item_values[0])
             self.entry_ln.insert(0, self.item_values[1])
             self.entry_project.insert(0, self.item_values[2])
-            self.entry_origin.insert(0, self.item_values[3])
+            # parse origin date if possible
+            try:
+                origin_dt = datetime.strptime(self.item_values[3], "%Y-%m-%d")
+                self.calendar_origin.set_date(origin_dt)
+            except:
+                pass
             self.entry_principal.insert(0, self.item_values[5])
             self.entry_interest.insert(0, self.item_values[6])
 
@@ -284,7 +298,11 @@ class EntryWindow(ctk.CTkToplevel):
         fn = self.entry_fn.get().strip()
         ln = self.entry_ln.get().strip()
         project_name = self.entry_project.get().strip()
-        origin_date_str = self.entry_origin.get().strip()
+
+        # Get the date from the DateEntry widget
+        origin_date_obj = self.calendar_origin.get_date()  # returns a datetime.date object
+        origin_date_str = origin_date_obj.strftime("%Y-%m-%d")
+
         principal_str = self.entry_principal.get().strip()
         interest_str = self.entry_interest.get().strip()
 
