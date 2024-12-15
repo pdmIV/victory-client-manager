@@ -26,7 +26,7 @@ class InvestmentApp(ctk.CTkFrame):
         self.setup_ui()
 
     def setup_ui(self):
-        self.master.title("Client Investments Manager")
+        self.master.title("Victory Client Manager")
 
         # Main frame
         self.main_frame = ctk.CTkFrame(self, corner_radius=10)

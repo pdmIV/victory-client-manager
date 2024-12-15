@@ -8,7 +8,7 @@ def main():
     model = InvestmentModel()
     controller = InvestmentController(model)  # create the Model + Controller
     root = ctk.CTk()
-    root.geometry("1100x600")
+    root.geometry("1500x700")
     app = InvestmentApp(root, controller)  # pass controller to the view
     root.mainloop()
 
