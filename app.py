@@ -5,11 +5,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 import os
 
-# NEW: import tkcalendar
 from tkcalendar import DateEntry  # pip install tkcalendar
 
-ctk.set_appearance_mode("System")  # "Dark", "Light", or "System"
-ctk.set_default_color_theme("blue")  # "blue", "green", or "dark-blue"
+ctk.set_appearance_mode("System")
+ctk.set_default_color_theme("blue")
 
 EXCEL_FILE = "investments.xlsx"
 
@@ -53,11 +52,11 @@ def save_investments(df):
 
 
 def calculate_maturity_date(origin_date_str):
-    """Given an origin date string (YYYY-MM-DD), return ~9-month later maturity date as string."""
+    """Return ~9-month later maturity date string, given an origin date string."""
     try:
         origin_date = datetime.strptime(origin_date_str, "%Y-%m-%d")
     except ValueError:
-        # Attempt different common format (e.g., 'MM/DD/YYYY')
+        # Attempt a different format
         origin_date = datetime.strptime(origin_date_str, "%m/%d/%Y")
     maturity_date = origin_date + timedelta(days=9*30)  # approximate 9 months as 270 days
     return maturity_date.strftime("%Y-%m-%d")
@@ -83,11 +82,15 @@ class InvestmentApp:
         # Load DataFrame from Excel
         self.df = load_investments()
 
-        # Main frame (ctk.CTkFrame)
+        # Main frame
         self.main_frame = ctk.CTkFrame(self.master, corner_radius=10)
         self.main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Define columns for the Treeview
+        # Treeview style overrides for larger/bold text
+        style = ttk.Style(self.main_frame)
+        style.configure("Treeview.Heading", font=("Helvetica", 12, "bold"))
+        style.configure("Treeview", font=("Helvetica", 11, "bold"))
+
         self.columns = [
             COLUMN_FIRST_NAME, COLUMN_LAST_NAME, COLUMN_PROJECT_NAME,
             COLUMN_ORIGIN_DATE, COLUMN_MATURITY_DATE,
@@ -95,8 +98,16 @@ class InvestmentApp:
             COLUMN_PRINCIPAL_PLUS_INTEREST
         ]
 
-        # Standard ttk Treeview
-        self.tree = ttk.Treeview(self.main_frame, columns=self.columns, show="headings", height=15)
+        self.tree = ttk.Treeview(
+            self.main_frame, 
+            columns=self.columns, 
+            show="headings", 
+            height=15, 
+            style="Treeview"
+        )
+
+        # Define red highlight tag
+        self.tree.tag_configure("alert", background="red", foreground="white")
 
         self.tree.heading(COLUMN_FIRST_NAME, text="First Name")
         self.tree.heading(COLUMN_LAST_NAME, text="Last Name")
@@ -108,7 +119,7 @@ class InvestmentApp:
         self.tree.heading(COLUMN_PRINCIPAL_PLUS_INTEREST, text="Principal + Interest")
 
         for col in self.columns:
-            self.tree.column(col, width=120, anchor=tk.CENTER)
+            self.tree.column(col, width=130, anchor=tk.CENTER)
 
         self.tree.pack(side="left", fill="both", expand=True)
 
@@ -136,7 +147,6 @@ class InvestmentApp:
         self.save_btn = ctk.CTkButton(self.btn_frame, text="Save to Excel", command=self.save_changes)
         self.save_btn.pack(side="left", padx=(0, 15))
 
-        # Search
         self.search_label = ctk.CTkLabel(self.btn_frame, text="Search Project Name:")
         self.search_label.pack(side="left", padx=(20, 5))
 
@@ -149,8 +159,13 @@ class InvestmentApp:
         self.reset_btn = ctk.CTkButton(self.btn_frame, text="Reset", command=self.reset_view)
         self.reset_btn.pack(side="left", padx=(0, 5))
 
+
     def load_tree(self, df=None):
-        """Clear and repopulate the Treeview. If df is None, use self.df."""
+        """
+        Clear and repopulate the Treeview. 
+        Highlights rows in red if maturity <= 7 days away or if past due.
+        """
+        # Clear existing items
         for row in self.tree.get_children():
             self.tree.delete(row)
 
@@ -158,16 +173,36 @@ class InvestmentApp:
             df = self.df
 
         for _, row_data in df.iterrows():
-            self.tree.insert("", tk.END, values=(
-                row_data.get(COLUMN_FIRST_NAME, ""),
-                row_data.get(COLUMN_LAST_NAME, ""),
-                row_data.get(COLUMN_PROJECT_NAME, ""),
-                row_data.get(COLUMN_ORIGIN_DATE, ""),
-                row_data.get(COLUMN_MATURITY_DATE, ""),
-                row_data.get(COLUMN_PRINCIPAL, ""),
-                row_data.get(COLUMN_INTEREST_RATE, ""),
-                row_data.get(COLUMN_PRINCIPAL_PLUS_INTEREST, "")
-            ))
+            # Default row style
+            row_tags = ()
+
+            maturity_str = row_data.get(COLUMN_MATURITY_DATE, "")
+            try:
+                maturity_dt = datetime.strptime(maturity_str, "%Y-%m-%d")
+                days_to_maturity = (maturity_dt - datetime.now()).days
+                # If maturity is a week or less away (days_to_maturity <= 7) 
+                # OR it's already past due (days_to_maturity < 0), highlight in red
+                if days_to_maturity <= 7:
+                    row_tags = ("alert",)
+            except:
+                pass
+
+            self.tree.insert(
+                "", 
+                tk.END, 
+                values=(
+                    row_data.get(COLUMN_FIRST_NAME, ""),
+                    row_data.get(COLUMN_LAST_NAME, ""),
+                    row_data.get(COLUMN_PROJECT_NAME, ""),
+                    row_data.get(COLUMN_ORIGIN_DATE, ""),
+                    row_data.get(COLUMN_MATURITY_DATE, ""),
+                    row_data.get(COLUMN_PRINCIPAL, ""),
+                    row_data.get(COLUMN_INTEREST_RATE, ""),
+                    row_data.get(COLUMN_PRINCIPAL_PLUS_INTEREST, "")
+                ),
+                tags=row_tags
+            )
+
 
     def add_entry(self):
         EntryWindow(self.master, self, mode="add")
@@ -236,7 +271,6 @@ class EntryWindow(ctk.CTkToplevel):
         self.frame = ctk.CTkFrame(self, corner_radius=10)
         self.frame.pack(padx=20, pady=20, fill="both", expand=True)
 
-        # Labels
         lbl_fn = ctk.CTkLabel(self.frame, text="First Name:")
         lbl_ln = ctk.CTkLabel(self.frame, text="Last Name:")
         lbl_project = ctk.CTkLabel(self.frame, text="Project Name:")
@@ -244,24 +278,13 @@ class EntryWindow(ctk.CTkToplevel):
         lbl_principal = ctk.CTkLabel(self.frame, text="Principal:")
         lbl_interest = ctk.CTkLabel(self.frame, text="Interest Rate (decimal):")
 
-        # Entry fields
         self.entry_fn = ctk.CTkEntry(self.frame, width=200)
         self.entry_ln = ctk.CTkEntry(self.frame, width=200)
         self.entry_project = ctk.CTkEntry(self.frame, width=200)
-
-        # REPLACE the origin CTkEntry with DateEntry from tkcalendar
-        # (We embed it in the same frame, so the style might differ from CTk widgets.)
-        self.calendar_origin = DateEntry(
-            self.frame, 
-            date_pattern="yyyy-mm-dd",  # store in a consistent format
-            selectmode='day',
-            width=18
-        )
-
+        self.calendar_origin = DateEntry(self.frame, date_pattern="yyyy-mm-dd", selectmode='day', width=18)
         self.entry_principal = ctk.CTkEntry(self.frame, width=200)
         self.entry_interest = ctk.CTkEntry(self.frame, width=200)
 
-        # Grid
         lbl_fn.grid(row=0, column=0, padx=5, pady=5, sticky="e")
         lbl_ln.grid(row=1, column=0, padx=5, pady=5, sticky="e")
         lbl_project.grid(row=2, column=0, padx=5, pady=5, sticky="e")
@@ -276,13 +299,10 @@ class EntryWindow(ctk.CTkToplevel):
         self.entry_principal.grid(row=4, column=1, padx=5, pady=5)
         self.entry_interest.grid(row=5, column=1, padx=5, pady=5)
 
-        # If edit mode, populate fields
         if self.mode == "edit" and self.item_values:
-            # item_values: (FN, LN, Project, Origin, Maturity, Principal, Rate, P+I)
             self.entry_fn.insert(0, self.item_values[0])
             self.entry_ln.insert(0, self.item_values[1])
             self.entry_project.insert(0, self.item_values[2])
-            # parse origin date if possible
             try:
                 origin_dt = datetime.strptime(self.item_values[3], "%Y-%m-%d")
                 self.calendar_origin.set_date(origin_dt)
@@ -298,11 +318,8 @@ class EntryWindow(ctk.CTkToplevel):
         fn = self.entry_fn.get().strip()
         ln = self.entry_ln.get().strip()
         project_name = self.entry_project.get().strip()
-
-        # Get the date from the DateEntry widget
-        origin_date_obj = self.calendar_origin.get_date()  # returns a datetime.date object
+        origin_date_obj = self.calendar_origin.get_date()
         origin_date_str = origin_date_obj.strftime("%Y-%m-%d")
-
         principal_str = self.entry_principal.get().strip()
         interest_str = self.entry_interest.get().strip()
 
@@ -354,7 +371,7 @@ class EntryWindow(ctk.CTkToplevel):
 
 def main():
     root = ctk.CTk()
-    root.geometry("1000x600")  # Example window size
+    root.geometry("1200x700")
     app = InvestmentApp(root)
     root.mainloop()
 
