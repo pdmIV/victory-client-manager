@@ -89,8 +89,12 @@ class InvestmentApp(ctk.CTkFrame):
         self.reset_btn = ctk.CTkButton(self.btn_frame, text="Reset", command=self.reset_view)
         self.reset_btn.pack(side="left", padx=(0, 5))
 
+        # Add a separate "Rollover Matured" button
+        self.rollover_btn = ctk.CTkButton(self.btn_frame, text="Rollover Matured", command=self.on_rollover_matured)
+        self.rollover_btn.pack(side="left", padx=(10, 5))
+
         # Export Option + Button
-        self.export_options = ["Export Selected Client", "Export Matured Clients", "Export All Clients"]
+        self.export_options = ["Export Selected Client", "Export All Clients"]
         self.export_var = tk.StringVar(value=self.export_options[0])
         self.export_menu = ctk.CTkOptionMenu(self.btn_frame, values=self.export_options, variable=self.export_var)
         self.export_menu.pack(side="left", padx=(20,5))
@@ -98,28 +102,56 @@ class InvestmentApp(ctk.CTkFrame):
         self.export_btn = ctk.CTkButton(self.btn_frame, text="Export to PDF", command=self.on_export_button)
         self.export_btn.pack(side="left", padx=(0,5))
 
+        # Add a slider or entry for highlight threshold
+        # Example: slider from 1 to 30 days
+        self.highlight_frame = ctk.CTkFrame(self, corner_radius=10)
+        self.highlight_frame.pack(fill="x", padx=10, pady=5)
+
+        ctk.CTkLabel(self.highlight_frame, text="Highlight Maturity Threshold (days):").pack(side="left", padx=(5, 5))
+        self.highlight_slider = ctk.CTkSlider(self.highlight_frame, from_=1, to=90, number_of_steps=89, width=250)
+        self.highlight_slider.set(7)  # default to 7 days if you like
+        self.highlight_slider.pack(side="left", padx=(0, 10))
+        
+        # We can show the slider value in a label dynamically
+        self.highlight_label_val = ctk.CTkLabel(self.highlight_frame, text="7")
+        self.highlight_label_val.pack(side="left", padx=(0, 5))
+
+        # Bind slider movement to update the label
+        self.highlight_slider.bind("<B1-Motion>", self.update_highlight_label)
+        self.highlight_slider.bind("<ButtonRelease-1>", self.update_highlight_label)
+
+        # Also add a button to reload the tree with the new threshold
+        self.update_btn = ctk.CTkButton(self.highlight_frame, text="Update Highlight", command=self.refresh_highlights)
+        self.update_btn.pack(side="left", padx=(5, 5))
+
         # Finally, populate the tree
         self.load_tree()
 
     def load_tree(self, df=None):
         """
-        Clears and repopulates the Treeview.
-        If df is None, uses self.controller.model.df.
-        Highlights rows in red if maturity <= 90 days or past due.
+        Clear and repopulate the Treeview.
+        Now uses the user-defined highlight threshold instead of a fixed 7 days.
         """
+        # 1) Clear existing rows
         for row in self.tree.get_children():
             self.tree.delete(row)
 
+        # 2) If no df provided, use the full model data
         if df is None:
             df = self.controller.model.df
 
+        # 3) Grab the highlight threshold from the slider
+        highlight_days = int(self.highlight_slider.get())
+
+        # 4) Populate the tree
         for _, row_data in df.iterrows():
             row_tags = ()
             maturity_str = row_data.get(COLUMN_MATURITY_DATE, "")
             try:
                 maturity_dt = datetime.strptime(maturity_str, "%Y-%m-%d")
                 days_to_maturity = (maturity_dt - datetime.now()).days
-                if days_to_maturity <= 90:
+                # If days_to_maturity <= highlight_days, highlight
+                if days_to_maturity <= highlight_days:
                     row_tags = ("alert",)
             except:
                 pass
@@ -192,18 +224,6 @@ class InvestmentApp(ctk.CTkFrame):
             row_dict = self.item_values_to_dict(item_values)
             self.controller.export_selected_client([row_dict])
             messagebox.showinfo("Exported", f"PDF exported for selected client.")
-
-        elif export_choice == "Export Matured Clients":
-            matured_rows = self.controller.export_matured_clients()
-            if not matured_rows:
-                messagebox.showinfo("No Matured Clients", "No clients found with matured notes.")
-                return
-            # We already rolled them over in the model. 
-            # The returned 'matured_rows' is the old data before rollover, which we can export.
-            rows_dict_list = [rd.to_dict() for rd in matured_rows]
-            messagebox.showinfo("Exported", f"Matured clients exported individually and rolled over.")
-            self.load_tree()  # refresh with updated data
-
         else:  # Export All Clients
             all_rows = self.controller.export_all_clients()
             self.controller.export_selected_client(all_rows)  # re-use the same method
@@ -223,6 +243,30 @@ class InvestmentApp(ctk.CTkFrame):
             COLUMN_PRINCIPAL_PLUS_INTEREST: item_values[8]
         }
         return row_dict
+    
+    def update_highlight_label(self, event):
+        current_val = int(self.highlight_slider.get())
+        self.highlight_label_val.configure(text=str(current_val))
+
+    def refresh_highlights(self):
+        """
+        Re-load the table to apply the new highlight threshold.
+        """
+        self.load_tree()  # load_tree reads the slider value internally
+
+    def on_rollover_matured(self):
+        """
+        Calls the controller to find all matured clients and roll them over.
+        The user can then optionally export them in separate steps.
+        """
+        matured_rows = self.controller.find_matured_clients()  # new method
+        if not matured_rows:
+            messagebox.showinfo("No Matured Clients", "No clients found with matured notes.")
+            return
+
+        self.controller.rollover_matured_clients(matured_rows)
+        messagebox.showinfo("Rollover Complete", f"Rolled over {len(matured_rows)} matured clients.")
+        self.load_tree()  # Refresh the table
 
 
 class EntryWindow(ctk.CTkToplevel):

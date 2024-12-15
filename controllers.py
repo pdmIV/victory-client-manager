@@ -70,37 +70,47 @@ class InvestmentController:
         """Export a single client or multiple selected rows to PDF."""
         export_rows_to_individual_pdfs(row_dict_list, OUTPUT_DIR, self.model)
 
-    def export_matured_clients(self):
-        """
-        Find matured clients, roll them over, export them individually.
-        Return a list of rolled-over row dictionaries for further use.
-        """
+    def find_matured_clients(self):
         matured_rows = []
-        matured_condition = []
         now = datetime.now()
-
         for idx, row_data in self.model.df.iterrows():
             maturity_str = str(row_data.get(COLUMN_MATURITY_DATE, ""))
             try:
                 maturity_dt = datetime.strptime(maturity_str, "%Y-%m-%d")
                 if maturity_dt < now:
                     matured_rows.append(row_data)
-                    matured_condition.append(idx)
             except:
                 pass
+        return matured_rows
 
-        if not matured_rows:
-            return []
+    def rollover_matured_clients(self, matured_rows):
+        """
+        For each matured row, roll it over: new origin = old maturity, new principal = old p+I, etc.
+        """
+        # We need to identify the index of each matured row in df
+        indices_to_roll = []
+        for row_data in matured_rows:
+            # row_data is a Series, let's find its index in the df
+            cond = (
+                (self.model.df[COLUMN_FIRST_NAME] == row_data[COLUMN_FIRST_NAME]) &
+                (self.model.df[COLUMN_LAST_NAME] == row_data[COLUMN_LAST_NAME]) &
+                (self.model.df[COLUMN_MATURITY_DATE].astype(str) == str(row_data[COLUMN_MATURITY_DATE])) &
+                (self.model.df[COLUMN_PRINCIPAL_PLUS_INTEREST].astype(str) == str(row_data[COLUMN_PRINCIPAL_PLUS_INTEREST]))
+            )
+            matched_idx = self.model.df[cond].index
+            if not matched_idx.empty:
+                indices_to_roll.append(matched_idx[0])
 
-        # Rollover logic
-        for idx in matured_condition:
-            old_p_plus_i = float(self.model.df.at[idx, COLUMN_PRINCIPAL_PLUS_INTEREST])
+        for idx in indices_to_roll:
+            old_principal_plus_interest = float(self.model.df.at[idx, COLUMN_PRINCIPAL_PLUS_INTEREST])
             old_interest_rate = float(self.model.df.at[idx, COLUMN_INTEREST_RATE])
             old_months = float(self.model.df.at[idx, COLUMN_MONTHS_TO_MATURITY])
             old_maturity_date_str = self.model.df.at[idx, COLUMN_MATURITY_DATE]
 
             new_origin_date_str = old_maturity_date_str
-            new_principal = old_p_plus_i
+            new_principal = old_principal_plus_interest
+
+            # Use the model to recalc
             new_maturity_date_str = self.model.calculate_maturity_date(new_origin_date_str, old_months)
             new_p_plus_i = self.model.calculate_principal_plus_interest(new_principal, old_interest_rate, old_months)
 
@@ -110,7 +120,6 @@ class InvestmentController:
             self.model.df.at[idx, COLUMN_PRINCIPAL_PLUS_INTEREST] = new_p_plus_i
 
         self.model.save_investments()
-        return matured_rows  # list of Series
 
     def export_all_clients(self):
         """Return all client rows as dictionaries to export individually."""
