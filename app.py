@@ -8,9 +8,11 @@ import os
 from tkcalendar import DateEntry  # pip install tkcalendar
 from fpdf import FPDF  # pip install fpdf
 
+# Configure CustomTkinter appearance mode
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
+# Constants
 EXCEL_FILE = "investments.xlsx"
 OUTPUT_DIR = "output"
 
@@ -25,7 +27,7 @@ COLUMN_INTEREST_RATE = "Interest Rate"
 COLUMN_PRINCIPAL_PLUS_INTEREST = "Principal + Interest"
 
 def load_investments():
-    """Reads the Excel file into a pandas DataFrame, ensuring all columns exist."""
+    """Reads the Excel file into a pandas DataFrame, ensuring all required columns exist."""
     if not os.path.exists(EXCEL_FILE):
         df = pd.DataFrame(columns=[
             COLUMN_FIRST_NAME, COLUMN_LAST_NAME, COLUMN_PROJECT_NAME,
@@ -48,11 +50,14 @@ def load_investments():
     return df
 
 def save_investments(df):
-    """Writes the DataFrame to the Excel file."""
+    """Writes the DataFrame back to the Excel file."""
     df.to_excel(EXCEL_FILE, index=False)
 
 def calculate_maturity_date(origin_date_str, months):
-    """Return maturity date string, given origin_date_str and months to maturity."""
+    """
+    Return maturity date string, given origin_date_str and months to maturity.
+    Approximates each month as 30 days.
+    """
     try:
         origin_date = datetime.strptime(origin_date_str, "%Y-%m-%d")
     except ValueError:
@@ -62,7 +67,9 @@ def calculate_maturity_date(origin_date_str, months):
     return maturity_date.strftime("%Y-%m-%d")
 
 def calculate_principal_plus_interest(principal, interest_rate, months):
-    """Simple interest approximation: principal * rate * (months/12)."""
+    """
+    Simple interest approximation: principal * rate * (months / 12).
+    """
     try:
         principal = float(principal)
         rate = float(interest_rate)
@@ -73,29 +80,39 @@ def calculate_principal_plus_interest(principal, interest_rate, months):
         return None
 
 class PDFExporter(FPDF):
-    """A simple helper class using FPDF to generate a PDF report."""
+    """Simple subclass of FPDF for a custom header, if desired."""
     def header(self):
-        # Add a title at the top of the page
         self.set_font("Arial", "B", 14)
-        self.cell(0, 10, "Client Investment Report", ln=True, align="C")
+        self.cell(0, 10, "Client Investment Letter", ln=True, align="C")
         self.ln(5)
 
-def export_to_pdf(rows, filename):
+def export_rows_to_individual_pdfs(rows, output_dir):
     """
-    Creates a letter-style PDF for each investor row in 'rows'.
+    For each client in 'rows', create a separate letter-style PDF named 'firstname_lastname.pdf'
+    placed in the 'output_dir' folder.
     """
-    pdf = PDFExporter()
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     
     for row_data in rows:
+        pdf = PDFExporter()
         pdf.add_page()
-        
-        pdf.set_font("Arial", "B", 14)
-        # Greeting
-        first_name = str(row_data.get(COLUMN_FIRST_NAME, ""))
-        last_name = str(row_data.get(COLUMN_LAST_NAME, ""))
-        pdf.cell(0, 10, f"Dear {first_name} {last_name},", ln=True)
 
+        pdf.set_font("Arial", "B", 14)
+        first_name = str(row_data.get(COLUMN_FIRST_NAME, "")).strip()
+        last_name = str(row_data.get(COLUMN_LAST_NAME, "")).strip()
+
+        # Construct PDF filename: "John_Doe.pdf"
+        safe_first = first_name.replace(" ", "_")
+        safe_last = last_name.replace(" ", "_")
+        pdf_filename = f"{safe_first}_{safe_last}.pdf"
+        pdf_path = os.path.join(output_dir, pdf_filename)
+
+        # Greeting
+        pdf.cell(0, 10, f"Dear {first_name} {last_name},", ln=True)
         pdf.ln(5)
+
+        # Body
         pdf.set_font("Arial", size=12)
         project_name = str(row_data.get(COLUMN_PROJECT_NAME, ""))
         origin_date = str(row_data.get(COLUMN_ORIGIN_DATE, ""))
@@ -123,9 +140,8 @@ def export_to_pdf(rows, filename):
         pdf.cell(0, 10, "---------------------------------", ln=True, align="C")
         pdf.cell(0, 10, "Authorized Signature", ln=True, align="C")
 
-    pdf.output(filename)
-    print(f"PDF Exported: {filename}")
-
+        pdf.output(pdf_path)
+        print(f"PDF Exported: {pdf_path}")
 
 class InvestmentApp:
     def __init__(self, master):
@@ -209,7 +225,10 @@ class InvestmentApp:
 
 
     def load_tree(self, df=None):
-        """Clear and repopulate Treeview. Highlight rows in red if maturity <= 7 days away or past due."""
+        """
+        Clear and repopulate Treeview. 
+        Highlights rows in red if maturity <= 7 days away or if it is already past due.
+        """
         for row in self.tree.get_children():
             self.tree.delete(row)
 
@@ -296,8 +315,14 @@ class InvestmentApp:
         self.search_entry.delete(0, tk.END)
         self.load_tree(self.df)
 
-    # -------- NEW Export Logic --------
     def on_export_button(self):
+        """
+        Handles the three export scenarios:
+          - Export Selected Client (one row)
+          - Export Matured Clients (rollover logic)
+          - Export All Clients
+        Then calls 'export_rows_to_individual_pdfs(...)' to produce letter PDFs named firstname_lastname.pdf.
+        """
         export_choice = self.export_var.get()
         if not os.path.exists(OUTPUT_DIR):
             os.makedirs(OUTPUT_DIR)
@@ -308,24 +333,20 @@ class InvestmentApp:
                 messagebox.showwarning("Warning", "Select a client row to export.")
                 return
             item_values = self.tree.item(selected_item[0], "values")
-            # Convert item_values to a dictionary for export
             row_dict = self.item_values_to_dict(item_values)
             rows_to_export = [row_dict]
-            pdf_filename = os.path.join(OUTPUT_DIR, "selected_client.pdf")
-            export_to_pdf(rows_to_export, pdf_filename)
-            messagebox.showinfo("Exported", f"PDF exported: {pdf_filename}")
-
+            export_rows_to_individual_pdfs(rows_to_export, OUTPUT_DIR)
+            messagebox.showinfo("Exported", f"PDF exported for selected client.")
+        
         elif export_choice == "Export Matured Clients":
-            # Find all matured clients (maturity date < today)
-            matured_condition = []
             matured_rows = []
+            matured_condition = []
             now = datetime.now()
             for idx, row_data in self.df.iterrows():
                 maturity_str = str(row_data.get(COLUMN_MATURITY_DATE, ""))
                 try:
                     maturity_dt = datetime.strptime(maturity_str, "%Y-%m-%d")
                     if maturity_dt < now:
-                        # This row is matured
                         matured_rows.append(row_data)
                         matured_condition.append(idx)
                 except:
@@ -335,57 +356,42 @@ class InvestmentApp:
                 messagebox.showinfo("No Matured Clients", "No clients found with matured notes.")
                 return
 
-            # Rollover logic: principal = principal + interest, 
-            # new origin date = old maturity date, recalc new maturity date 
-            # using the same months to maturity.
+            # Rollover logic
             for idx in matured_condition:
-                old_principal = float(self.df.at[idx, COLUMN_PRINCIPAL])
-                old_interest_rate = float(self.df.at[idx, COLUMN_INTEREST_RATE])
                 old_principal_plus_interest = float(self.df.at[idx, COLUMN_PRINCIPAL_PLUS_INTEREST])
-                old_maturity_date_str = self.df.at[idx, COLUMN_MATURITY_DATE]
+                old_interest_rate = float(self.df.at[idx, COLUMN_INTEREST_RATE])
                 old_months = float(self.df.at[idx, COLUMN_MONTHS_TO_MATURITY])
-                # roll over principal => new note starts at old maturity date
+                old_maturity_date_str = self.df.at[idx, COLUMN_MATURITY_DATE]
+
                 new_origin_date_str = old_maturity_date_str
-                new_principal = old_principal_plus_interest  # principal + interest
-                # recalc new maturity
+                new_principal = old_principal_plus_interest
+
                 new_maturity_date_str = calculate_maturity_date(new_origin_date_str, old_months)
-                # recalc principal + interest
                 new_p_plus_i = calculate_principal_plus_interest(new_principal, old_interest_rate, old_months)
 
-                # Update DataFrame
                 self.df.at[idx, COLUMN_ORIGIN_DATE] = new_origin_date_str
                 self.df.at[idx, COLUMN_PRINCIPAL] = new_principal
                 self.df.at[idx, COLUMN_MATURITY_DATE] = new_maturity_date_str
                 self.df.at[idx, COLUMN_PRINCIPAL_PLUS_INTEREST] = new_p_plus_i
 
-            # Save the updated DataFrame
             save_investments(self.df)
             self.load_tree()
 
-            # Convert matured_rows to dicts for export
-            rows_dict_list = []
-            for row_data in matured_rows:
-                rows_dict_list.append(row_data.to_dict())
-
-            pdf_filename = os.path.join(OUTPUT_DIR, "matured_clients.pdf")
-            export_to_pdf(rows_dict_list, pdf_filename)
-            messagebox.showinfo("Exported", f"Matured clients exported and rolled over.\nPDF: {pdf_filename}")
-
+            rows_dict_list = [rd.to_dict() for rd in matured_rows]
+            export_rows_to_individual_pdfs(rows_dict_list, OUTPUT_DIR)
+            messagebox.showinfo("Exported", f"Matured clients exported individually and rolled over.")
+        
         else:  # Export All Clients
-            all_rows = []
-            for _, row_data in self.df.iterrows():
-                all_rows.append(row_data.to_dict())
-
-            pdf_filename = os.path.join(OUTPUT_DIR, "all_clients.pdf")
-            export_to_pdf(all_rows, pdf_filename)
-            messagebox.showinfo("Exported", f"All clients exported.\nPDF: {pdf_filename}")
+            all_rows = [row.to_dict() for _, row in self.df.iterrows()]
+            export_rows_to_individual_pdfs(all_rows, OUTPUT_DIR)
+            messagebox.showinfo("Exported", f"All clients exported as individual PDFs.")
 
     def item_values_to_dict(self, item_values):
         """
         Convert the tuple of item values from the TreeView back into a dictionary
         matching the DataFrame columns.
         """
-        # item_values format = (FirstName, LastName, ProjectName, OriginDate, Months, MaturityDate, Principal, Rate, P+I)
+        # item_values = (First, Last, Project, Origin, Months, Maturity, Principal, Rate, P+I)
         row_dict = {
             COLUMN_FIRST_NAME: item_values[0],
             COLUMN_LAST_NAME: item_values[1],
@@ -496,7 +502,6 @@ class EntryWindow(ctk.CTkToplevel):
         origin_date_str = origin_date_obj.strftime("%Y-%m-%d")
 
         months_val = int(self.slider_months.get())
-
         principal_str = self.entry_principal.get().strip()
         interest_str = self.entry_interest.get().strip()
 
@@ -547,7 +552,6 @@ class EntryWindow(ctk.CTkToplevel):
 
         self.app.load_tree()
         self.destroy()
-
 
 def main():
     root = ctk.CTk()
