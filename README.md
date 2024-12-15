@@ -10,10 +10,6 @@
 2. [Features](#features)  
 3. [Project Structure](#project-structure)  
 4. [Setup & Installation](#setup--installation)  
-5. [Usage](#usage)  
-6. [Screenshots (Optional)](#screenshots-optional)  
-7. [License (Optional)](#license-optional)
-
 ---
 
 ## Overview
