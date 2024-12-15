@@ -80,6 +80,10 @@ victory-client-manager/ ├── main.py ├── models.py ├── controll
    ```bash
    git clone https://github.com/<YourUsername>/victory-client-manager.git
    cd victory-client-manager
+2. **Optionally, Compile to Binary**:
+   ```bash
+   pyinstaller main.py --onefile --name victory_client_manager
+
 
 ## Example Images
 ![alt text](image.png)
