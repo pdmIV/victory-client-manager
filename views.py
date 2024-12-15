@@ -8,7 +8,7 @@ from datetime import datetime
 from models import (
     COLUMN_FIRST_NAME, COLUMN_LAST_NAME, COLUMN_PROJECT_NAME, COLUMN_ORIGIN_DATE,
     COLUMN_MONTHS_TO_MATURITY, COLUMN_MATURITY_DATE, COLUMN_PRINCIPAL,
-    COLUMN_INTEREST_RATE, COLUMN_PRINCIPAL_PLUS_INTEREST
+    COLUMN_INTEREST_RATE, COLUMN_PRINCIPAL_PLUS_INTEREST, COLUMN_AUTO_ROLLOVER
 )
 from controllers import InvestmentController
 
@@ -39,7 +39,8 @@ class InvestmentApp(ctk.CTkFrame):
         self.columns = [
             COLUMN_FIRST_NAME, COLUMN_LAST_NAME, COLUMN_PROJECT_NAME,
             COLUMN_ORIGIN_DATE, COLUMN_MONTHS_TO_MATURITY, COLUMN_MATURITY_DATE,
-            COLUMN_PRINCIPAL, COLUMN_INTEREST_RATE, COLUMN_PRINCIPAL_PLUS_INTEREST
+            COLUMN_PRINCIPAL, COLUMN_INTEREST_RATE, COLUMN_PRINCIPAL_PLUS_INTEREST,
+            COLUMN_AUTO_ROLLOVER
         ]
 
         self.tree = ttk.Treeview(
@@ -168,7 +169,8 @@ class InvestmentApp(ctk.CTkFrame):
                     row_data.get(COLUMN_MATURITY_DATE, ""),
                     row_data.get(COLUMN_PRINCIPAL, ""),
                     row_data.get(COLUMN_INTEREST_RATE, ""),
-                    row_data.get(COLUMN_PRINCIPAL_PLUS_INTEREST, "")
+                    row_data.get(COLUMN_PRINCIPAL_PLUS_INTEREST, ""),
+                    row_data.get(COLUMN_AUTO_ROLLOVER, "")
                 ),
                 tags=row_tags
             )
@@ -240,7 +242,8 @@ class InvestmentApp(ctk.CTkFrame):
             COLUMN_MATURITY_DATE: item_values[5],
             COLUMN_PRINCIPAL: item_values[6],
             COLUMN_INTEREST_RATE: item_values[7],
-            COLUMN_PRINCIPAL_PLUS_INTEREST: item_values[8]
+            COLUMN_PRINCIPAL_PLUS_INTEREST: item_values[8],
+            COLUMN_AUTO_ROLLOVER: item_values[9]
         }
         return row_dict
     
@@ -331,6 +334,19 @@ class EntryWindow(ctk.CTkToplevel):
         self.entry_principal.grid(row=5, column=1, padx=5, pady=5)
         self.entry_interest.grid(row=6, column=1, padx=5, pady=5)
 
+        lbl_auto_rollover = ctk.CTkLabel(self.frame, text="Auto Rollover:")
+        lbl_auto_rollover.grid(row=7, column=0, padx=5, pady=5, sticky="e")
+
+        self.auto_rollover_var = tk.BooleanVar(value=False)
+        self.checkbox_auto_rollover = ctk.CTkCheckBox(
+            self.frame, 
+            text="", 
+            variable=self.auto_rollover_var, 
+            onvalue=True, 
+            offvalue=False
+        )
+        self.checkbox_auto_rollover.grid(row=7, column=1, padx=5, pady=5, sticky="w")
+
         if self.mode == "edit" and self.item_values:
             self.populate_fields()
         else:
@@ -338,7 +354,7 @@ class EntryWindow(ctk.CTkToplevel):
             self.label_month_value.configure(text="9")
 
         btn_action = ctk.CTkButton(self.frame, text="Save", command=self.save_entry)
-        btn_action.grid(row=7, column=0, columnspan=3, pady=10)
+        btn_action.grid(row=8, column=0, columnspan=3, pady=10)
 
         self.slider_months.bind("<B1-Motion>", self.update_month_label)
         self.slider_months.bind("<ButtonRelease-1>", self.update_month_label)
@@ -365,6 +381,7 @@ class EntryWindow(ctk.CTkToplevel):
 
         self.entry_principal.insert(0, self.item_values[6])
         self.entry_interest.insert(0, self.item_values[7])
+        self.auto_rollover_var.set(bool(self.item_values[9]))
 
     def update_month_label(self, event):
         current_val = int(self.slider_months.get())
@@ -380,6 +397,7 @@ class EntryWindow(ctk.CTkToplevel):
         months_val = int(self.slider_months.get())
         principal_str = self.entry_principal.get().strip()
         interest_str = self.entry_interest.get().strip()
+        auto_rollover_val = self.auto_rollover_var.get()
 
         if not (fn and ln and project_name and origin_date_str and principal_str and interest_str):
             messagebox.showerror("Error", "All fields are required.")
@@ -399,7 +417,8 @@ class EntryWindow(ctk.CTkToplevel):
                 COLUMN_MATURITY_DATE: maturity_date_str,
                 COLUMN_PRINCIPAL: float(principal_str),
                 COLUMN_INTEREST_RATE: float(interest_str),
-                COLUMN_PRINCIPAL_PLUS_INTEREST: principal_plus_interest
+                COLUMN_PRINCIPAL_PLUS_INTEREST: principal_plus_interest,
+                COLUMN_AUTO_ROLLOVER: auto_rollover_val
             }
             self.controller.add_investment(new_row)
         else:
@@ -413,7 +432,8 @@ class EntryWindow(ctk.CTkToplevel):
                 COLUMN_MATURITY_DATE: maturity_date_str,
                 COLUMN_PRINCIPAL: float(principal_str),
                 COLUMN_INTEREST_RATE: float(interest_str),
-                COLUMN_PRINCIPAL_PLUS_INTEREST: principal_plus_interest
+                COLUMN_PRINCIPAL_PLUS_INTEREST: principal_plus_interest,
+                COLUMN_AUTO_ROLLOVER: auto_rollover_val
             }
             self.controller.edit_investment(old_values, updated_row)
 

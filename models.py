@@ -13,6 +13,8 @@ COLUMN_MATURITY_DATE = "Note Maturity Date"
 COLUMN_PRINCIPAL = "Principal"
 COLUMN_INTEREST_RATE = "Interest Rate"
 COLUMN_PRINCIPAL_PLUS_INTEREST = "Principal + Interest"
+COLUMN_AUTO_ROLLOVER = "Auto Rollover"
+
 
 EXCEL_FILE = "investments.xlsx"
 OUTPUT_DIR = "output"
@@ -32,7 +34,8 @@ class InvestmentModel:
             df = pd.DataFrame(columns=[
                 COLUMN_FIRST_NAME, COLUMN_LAST_NAME, COLUMN_PROJECT_NAME,
                 COLUMN_ORIGIN_DATE, COLUMN_MONTHS_TO_MATURITY, COLUMN_MATURITY_DATE,
-                COLUMN_PRINCIPAL, COLUMN_INTEREST_RATE, COLUMN_PRINCIPAL_PLUS_INTEREST
+                COLUMN_PRINCIPAL, COLUMN_INTEREST_RATE, COLUMN_PRINCIPAL_PLUS_INTEREST,
+                COLUMN_AUTO_ROLLOVER
             ])
             df.to_excel(EXCEL_FILE, index=False)
             return df
@@ -41,7 +44,8 @@ class InvestmentModel:
         required_cols = [
             COLUMN_FIRST_NAME, COLUMN_LAST_NAME, COLUMN_PROJECT_NAME,
             COLUMN_ORIGIN_DATE, COLUMN_MONTHS_TO_MATURITY, COLUMN_MATURITY_DATE,
-            COLUMN_PRINCIPAL, COLUMN_INTEREST_RATE, COLUMN_PRINCIPAL_PLUS_INTEREST
+            COLUMN_PRINCIPAL, COLUMN_INTEREST_RATE, COLUMN_PRINCIPAL_PLUS_INTEREST,
+            COLUMN_AUTO_ROLLOVER
         ]
         for col in required_cols:
             if col not in df.columns:
