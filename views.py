@@ -105,7 +105,7 @@ class InvestmentApp(ctk.CTkFrame):
         """
         Clears and repopulates the Treeview.
         If df is None, uses self.controller.model.df.
-        Highlights rows in red if maturity <= 7 days or past due.
+        Highlights rows in red if maturity <= 90 days or past due.
         """
         for row in self.tree.get_children():
             self.tree.delete(row)
@@ -119,7 +119,7 @@ class InvestmentApp(ctk.CTkFrame):
             try:
                 maturity_dt = datetime.strptime(maturity_str, "%Y-%m-%d")
                 days_to_maturity = (maturity_dt - datetime.now()).days
-                if days_to_maturity <= 7:
+                if days_to_maturity <= 90:
                     row_tags = ("alert",)
             except:
                 pass
